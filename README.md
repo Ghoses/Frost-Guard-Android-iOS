@@ -13,22 +13,22 @@ Frost Guard is a mobile app that provides frost warnings based on temperature fo
 ## Screenshots
 
 ### Startscreen
-![Startscreen](../images/00.png){width=50%}
+![Startscreen](images/00.png){width=50%}
 
 ### Locations
-![Locations](../images/01.png){width=50%}
+![Locations](images/01.png){width=50%}
 
 ### Locations 2
-![Locations 2](../images/02.png){width=50%}
+![Locations 2](images/02.png){width=50%}
 
 ### Settings
-![Settings](../images/03.png){width=50%}
+![Settings](images/03.png){width=50%}
 
 ### Settings 2
-![Settings 2](../images/04.png){width=50%}
+![Settings 2](images/04.png){width=50%}
 
 ### Notification
-![Notification](../images/05.png){width=50%}
+![Notification](images/05.png){width=50%}
 
 ## Technical Information
 
