@@ -1,30 +1,50 @@
-# Frost Guard App
+# Frost Guard
 
-Eine moderne App, die vor nächtlichem Frost an deinen gewählten Standorten warnt.
+Frost Guard is a mobile app that provides frost warnings based on temperature forecasts for various locations. The app is designed for both Android and iOS platforms.
 
 ## Features
 
-- Überwachung von mehreren Standorten
-- Anpassbare Frostwarngrenze (Standard: 3°C)
-- Automatische Benachrichtigungen bei Frostgefahr
-- Modernes Design mit Dark Mode
-- Tägliche Prüfung im Hintergrund
+- Frost warnings based on temperature forecasts
+- Support for multiple locations
+- Daily background checks for frost warnings
+- Test notification feature for debugging
+- Modern design with dark mode
 
-## Technische Informationen
+## Screenshots
 
-Die App wurde mit Flutter entwickelt und verwendet die OpenWeatherMap API für Wettervorhersagen.
+### Startscreen
+![Startscreen](../images/00.png){width=50%}
 
-## Einrichtung
+### Locations
+![Locations](../images/01.png){width=50%}
 
-1. Klone dieses Repository
-2. Erstelle eine `.env` Datei im Hauptverzeichnis mit folgendem Inhalt:
+### Locations 2
+![Locations 2](../images/02.png){width=50%}
+
+### Settings
+![Settings](../images/03.png){width=50%}
+
+### Settings 2
+![Settings 2](../images/04.png){width=50%}
+
+### Notification
+![Notification](../images/05.png){width=50%}
+
+## Technical Information
+
+The app was developed using Flutter and uses the OpenWeatherMap API for weather forecasts.
+
+## Setup
+
+1. Clone this repository
+2. Create a `.env` file in the main directory with the following content:
 ```
 OPENWEATHERMAP_API_KEY=xxx
 
 ```
-3. Führe `flutter pub get` aus, um alle Abhängigkeiten zu installieren
-4. Starte die App mit `flutter run`
+3. Run `flutter pub get` to install all dependencies
+4. Start the app with `flutter run`
 
-## Lizenz
+## License
 
 Open Source
