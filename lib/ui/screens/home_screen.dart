@@ -9,6 +9,7 @@ import 'package:frost_guard/ui/screens/settings_screen.dart';
 import 'package:frost_guard/ui/widgets/add_location_dialog.dart';
 import 'package:frost_guard/ui/widgets/weather_card.dart';
 import 'package:provider/provider.dart';
+import 'package:frost_guard/core/services/notification_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -170,6 +171,28 @@ class _HomeScreenState extends State<HomeScreen> {
                     },
                   );
                 }).toList(),
+                
+                // Test-Button für Benachrichtigungen
+                Padding(
+                  padding: const EdgeInsets.only(top: ThemeConstants.normalPadding),
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      NotificationService().showTestNotification();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Test-Benachrichtigung gesendet'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.notifications),
+                    label: const Text('Test Benachrichtigung'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Theme.of(context).colorScheme.secondary,
+                      foregroundColor: Theme.of(context).colorScheme.onSecondary,
+                    ),
+                  ),
+                ),
               ],
             );
           },

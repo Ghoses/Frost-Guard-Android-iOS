@@ -9,7 +9,7 @@ import 'package:frost_guard/ui/screens/home_screen.dart';
 import 'package:frost_guard/ui/theme/app_theme.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart';
-// import 'package:frost_guard/core/services/notification_service.dart';
+import 'package:frost_guard/core/services/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,7 +21,7 @@ Future<void> main() async {
   Intl.defaultLocale = 'de_DE';
   
   // Initialisiere Benachrichtigungsdienst
-  // await NotificationService().initNotifications();
+  await NotificationService().initNotifications();
   
   // Setze die Statusleiste auf transparent für ein besseres Design
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(

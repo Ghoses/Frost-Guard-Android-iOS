@@ -1,5 +1,4 @@
-// Temporär auskommentiert, um die App ohne Benachrichtigungen zu testen
-/*
+// Benachrichtigungsdienst für Frost Guard
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
@@ -37,10 +36,11 @@ class NotificationService {
         iOS: initializationSettingsIOS,
       );
       
-      // Initialisiere Plugin
+      // Initialisiere Plugin und fordere Berechtigungen an
       await flutterLocalNotificationsPlugin.initialize(
         initializationSettings,
       );
+      
     } catch (e) {
       throw NotificationException('Fehler bei der Initialisierung der Benachrichtigungen: $e');
     }
@@ -51,7 +51,7 @@ class NotificationService {
     try {
       // Konfiguriere Android-Details
       const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-        AppConstants.FROST_WARNING_CHANNEL_ID,
+        'frost_warning_channel',
         'Frost-Warnungen',
         channelDescription: 'Benachrichtigungen über Frostgefahr',
         importance: Importance.high,
@@ -74,7 +74,7 @@ class NotificationService {
       
       // Zeige Benachrichtigung
       await flutterLocalNotificationsPlugin.show(
-        AppConstants.FROST_WARNING_ID,
+        1, // Notification ID
         title,
         body,
         platformDetails,
@@ -82,6 +82,21 @@ class NotificationService {
     } catch (e) {
       throw NotificationException('Fehler beim Senden der Frostwarnung: $e');
     }
+  }
+  
+  // Methode für den Test-Button
+  Future<void> showTestNotification() async {
+    await showFrostWarning(
+      'Test: Frostwarnung', 
+      'Dies ist eine Test-Benachrichtigung. Die Benachrichtigungsfunktion funktioniert!'
+    );
+  }
+  
+  // Sende eine Frostwarnung für einen bestimmten Ort
+  Future<void> showFrostWarningNotification(String locationName, double temperature) async {
+    final String title = 'Frostwarnung für $locationName';
+    final String body = 'Die Temperatur wird voraussichtlich auf ${temperature.toStringAsFixed(1)}°C fallen.';
+    await showFrostWarning(title, body);
   }
   
   // Plane tägliche Überprüfung
@@ -96,7 +111,7 @@ class NotificationService {
       // Konfiguriere Benachrichtigungsdetails (niedrigere Priorität für Hintergrundaufgaben)
       const notificationDetails = NotificationDetails(
           android: AndroidNotificationDetails(
-            AppConstants.DAILY_CHECK_CHANNEL_ID,
+            'daily_check_channel',
             'Tägliche Überprüfungen',
             channelDescription: 'Hintergrundüberprüfungen der Wettervorhersage',
             importance: Importance.low,
@@ -113,12 +128,12 @@ class NotificationService {
       
       // Plane tägliche Benachrichtigung
       await flutterLocalNotificationsPlugin.zonedSchedule(
-        AppConstants.DAILY_CHECK_ID,
+        0, // Notification ID
         'Wetterüberprüfung',
         'Überprüfung der Wettervorhersage auf Frost',
         scheduledTime,
         notificationDetails,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        androidAllowWhileIdle: true,
         uiLocalNotificationDateInterpretation:
             UILocalNotificationDateInterpretation.absoluteTime,
         matchDateTimeComponents: DateTimeComponents.time,
@@ -146,28 +161,9 @@ class NotificationService {
     
     return scheduledDate;
   }
-}
-*/
-
-// Temporärer Ersatz für die NotificationService-Klasse
-class NotificationService {
-  static final NotificationService _instance = NotificationService._internal();
-  factory NotificationService() => _instance;
-  NotificationService._internal();
-
-  Future<void> initNotifications() async {
-    // Leere Implementierung
-  }
   
-  Future<void> showFrostWarningNotification(String locationName, double temperature) async {
-    // Leere Implementierung
-  }
-  
-  Future<void> scheduleDailyCheck(int hour, int minute) async {
-    // Leere Implementierung
-  }
-  
+  // Lösche alle Benachrichtigungen
   Future<void> cancelAllNotifications() async {
-    // Leere Implementierung
+    await flutterLocalNotificationsPlugin.cancelAll();
   }
 }
