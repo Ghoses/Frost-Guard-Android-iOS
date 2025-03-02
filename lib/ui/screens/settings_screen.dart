@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:frost_guard/core/constants/app_constants.dart';
 import 'package:frost_guard/core/constants/theme_constants.dart';
+import 'package:frost_guard/core/services/notification_service.dart';
 import 'package:frost_guard/core/utils/temperature_utils.dart';
 import 'package:frost_guard/providers/location_provider.dart';
 import 'package:frost_guard/providers/settings_provider.dart';
@@ -177,11 +178,68 @@ class SettingsScreen extends StatelessWidget {
 
   Widget _buildNotificationSwitch(BuildContext context, SettingsProvider settingsProvider) {
     return Card(
-      child: SwitchListTile(
-        title: const Text('Benachrichtigungen'),
-        subtitle: const Text('Erhalten Sie Benachrichtigungen bei Frostgefahr'),
-        value: settingsProvider.notificationsEnabled,
-        onChanged: (value) => settingsProvider.setNotificationsEnabled(value),
+      child: Column(
+        children: [
+          SwitchListTile(
+            title: const Text('Benachrichtigungen'),
+            subtitle: const Text('Erhalten Sie Benachrichtigungen bei Frostgefahr'),
+            value: settingsProvider.notificationsEnabled,
+            onChanged: (value) => settingsProvider.setNotificationsEnabled(value),
+          ),
+          if (settingsProvider.notificationsEnabled)
+            Padding(
+              padding: const EdgeInsets.only(
+                left: ThemeConstants.normalPadding,
+                right: ThemeConstants.normalPadding,
+                bottom: ThemeConstants.normalPadding,
+              ),
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  try {
+                    // Überprüfe Berechtigungen vor dem Senden
+                    final bool hasPermission = await NotificationService().checkAndRequestNotificationPermissions();
+                    
+                    if (!hasPermission) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Benachrichtigungen wurden nicht zugelassen. Bitte aktiviere sie in den Geräteeinstellungen.'),
+                          duration: Duration(seconds: 4),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+                    
+                    // Sende Test-Benachrichtigung
+                    await NotificationService().showTestNotification();
+                    
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Test-Benachrichtigung gesendet'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Fehler: ${e.toString()}'),
+                        duration: const Duration(seconds: 4),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.notifications),
+                label: const Text('Test Benachrichtigung'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.secondary,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

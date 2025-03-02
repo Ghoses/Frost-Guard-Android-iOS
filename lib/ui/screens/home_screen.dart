@@ -172,25 +172,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 }).toList(),
                 
-                // Test-Button für Benachrichtigungen
                 Padding(
                   padding: const EdgeInsets.only(top: ThemeConstants.normalPadding),
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      NotificationService().showTestNotification();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Test-Benachrichtigung gesendet'),
-                          duration: Duration(seconds: 2),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Aktualisiert: ${_getLastUpdatedText(weatherProvider.lastUpdated)}',
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 12,
                         ),
-                      );
-                    },
-                    icon: const Icon(Icons.notifications),
-                    label: const Text('Test Benachrichtigung'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.secondary,
-                      foregroundColor: Theme.of(context).colorScheme.onSecondary,
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -204,5 +198,24 @@ class _HomeScreenState extends State<HomeScreen> {
         child: const Icon(Icons.add_location_alt_outlined),
       ),
     );
+  }
+
+  String _getLastUpdatedText(DateTime? lastUpdated) {
+    if (lastUpdated == null) {
+      return 'nie';
+    }
+
+    final now = DateTime.now();
+    final difference = now.difference(lastUpdated);
+
+    if (difference.inMinutes < 1) {
+      return 'vor wenigen Sekunden';
+    } else if (difference.inMinutes < 60) {
+      return 'vor ${difference.inMinutes} Minuten';
+    } else if (difference.inHours < 24) {
+      return 'vor ${difference.inHours} Stunden';
+    } else {
+      return 'vor ${difference.inDays} Tagen';
+    }
   }
 }

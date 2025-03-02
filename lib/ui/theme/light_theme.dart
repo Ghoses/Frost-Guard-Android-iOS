@@ -8,7 +8,6 @@ class LightTheme {
     colorScheme: const ColorScheme.light(
       primary: ThemeConstants.primaryColorLight,
       secondary: ThemeConstants.accentColorLight,
-      background: ThemeConstants.backgroundColorLight,
       surface: ThemeConstants.surfaceColorLight,
     ),
     scaffoldBackgroundColor: ThemeConstants.backgroundColorLight,
@@ -70,14 +69,14 @@ class LightTheme {
       thumbColor: ThemeConstants.primaryColorLight,
     ),
     switchTheme: SwitchThemeData(
-      thumbColor: MaterialStateProperty.resolveWith((states) {
-        if (states.contains(MaterialState.selected)) {
+      thumbColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) {
           return ThemeConstants.primaryColorLight;
         }
         return Colors.grey;
       }),
-      trackColor: MaterialStateProperty.resolveWith((states) {
-        if (states.contains(MaterialState.selected)) {
+      trackColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) {
           return ThemeConstants.primaryColorLight.withOpacity(0.5);
         }
         return Colors.grey.withOpacity(0.5);

@@ -14,9 +14,11 @@ class WeatherProvider with ChangeNotifier {
   
   bool _isLoading = false;
   String _error = '';
+  DateTime? _lastUpdated;
   
   bool get isLoading => _isLoading;
   String get error => _error;
+  DateTime? get lastUpdated => _lastUpdated;
   
   // Wetterdaten für einen bestimmten Standort abrufen
   WeatherData getWeatherFor(String locationId) {
@@ -68,6 +70,9 @@ class WeatherProvider with ChangeNotifier {
           lowestTemp
         );
       }
+      
+      // Aktualisiere den Zeitstempel der letzten Aktualisierung
+      _lastUpdated = DateTime.now();
       
       notifyListeners();
     } catch (e) {

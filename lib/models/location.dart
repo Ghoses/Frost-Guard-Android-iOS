@@ -43,7 +43,7 @@ class Location {
     bool? isCurrentLocation,
   }) {
     return Location(
-      id: this.id,
+      id: id,
       name: name ?? this.name,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,

@@ -8,7 +8,6 @@ class DarkTheme {
     colorScheme: const ColorScheme.dark(
       primary: ThemeConstants.primaryColorDark,
       secondary: ThemeConstants.accentColorDark,
-      background: ThemeConstants.backgroundColorDark,
       surface: ThemeConstants.surfaceColorDark,
     ),
     scaffoldBackgroundColor: ThemeConstants.backgroundColorDark,
@@ -70,14 +69,14 @@ class DarkTheme {
       thumbColor: ThemeConstants.primaryColorDark,
     ),
     switchTheme: SwitchThemeData(
-      thumbColor: MaterialStateProperty.resolveWith((states) {
-        if (states.contains(MaterialState.selected)) {
+      thumbColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) {
           return ThemeConstants.primaryColorDark;
         }
         return Colors.grey;
       }),
-      trackColor: MaterialStateProperty.resolveWith((states) {
-        if (states.contains(MaterialState.selected)) {
+      trackColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) {
           return ThemeConstants.primaryColorDark.withOpacity(0.5);
         }
         return Colors.grey.withOpacity(0.5);

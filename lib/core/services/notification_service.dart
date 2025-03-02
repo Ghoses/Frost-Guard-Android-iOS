@@ -4,6 +4,8 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:frost_guard/core/constants/app_constants.dart';
 import 'package:frost_guard/core/errors/exceptions.dart';
+import 'dart:io' show Platform;
+import 'package:flutter/material.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -12,7 +14,12 @@ class NotificationService {
 
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
-
+  
+  // Definiere die Kanal-IDs
+  static const String frostWarningChannelId = 'frost_warning_channel';
+  static const String dailyCheckChannelId = 'daily_check_channel';
+  
+  // Initialisiere Benachrichtigungen
   Future<void> initNotifications() async {
     try {
       // Initialisiere Zeitzonen
@@ -25,9 +32,9 @@ class NotificationService {
       // Initialisiere iOS-Einstellungen
       const DarwinInitializationSettings initializationSettingsIOS =
           DarwinInitializationSettings(
-        requestAlertPermission: true,
-        requestBadgePermission: true,
-        requestSoundPermission: true,
+        requestAlertPermission: false,  // Wir fragen Berechtigungen später explizit an
+        requestBadgePermission: false,
+        requestSoundPermission: false,
       );
       
       // Kombiniere Plattform-Einstellungen
@@ -36,9 +43,12 @@ class NotificationService {
         iOS: initializationSettingsIOS,
       );
       
-      // Initialisiere Plugin und fordere Berechtigungen an
+      // Initialisiere Plugin
       await flutterLocalNotificationsPlugin.initialize(
         initializationSettings,
+        onDidReceiveNotificationResponse: (details) {
+          debugPrint('Notification clicked: ${details.payload}');
+        },
       );
       
     } catch (e) {
@@ -46,17 +56,65 @@ class NotificationService {
     }
   }
   
+  // Überprüfe und fordere Berechtigungen an
+  Future<bool> checkAndRequestNotificationPermissions() async {
+    try {
+      if (Platform.isAndroid) {
+        // Prüfe, ob die Android-Version >= 13 (API 33) ist
+        final AndroidFlutterLocalNotificationsPlugin? androidPlugin = 
+            flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+        
+        if (androidPlugin != null) {
+          final bool? areEnabled = await androidPlugin.areNotificationsEnabled();
+          
+          // Wenn Berechtigungen nicht aktiviert sind, zeige Hinweis
+          if (areEnabled == false) {
+            debugPrint('Benachrichtigungen sind nicht aktiviert. Bitte in den Einstellungen aktivieren.');
+            // In Android 13+ können wir nicht direkt Berechtigungen anfordern, 
+            // wir zeigen nur einen Hinweis an und der Benutzer muss selbst die Einstellungen öffnen
+            return false;
+          }
+          return areEnabled ?? false;
+        }
+      } else if (Platform.isIOS) {
+        final IOSFlutterLocalNotificationsPlugin? iosPlugin = 
+            flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>();
+        
+        if (iosPlugin != null) {
+          final bool? result = await iosPlugin.requestPermissions(
+            alert: true,
+            badge: true,
+            sound: true,
+          );
+          return result ?? false;
+        }
+      }
+      return false;
+    } catch (e) {
+      debugPrint('Fehler bei der Berechtigungsanfrage: $e');
+      return false;
+    }
+  }
+  
   // Sende eine Frostwarnung
   Future<void> showFrostWarning(String title, String body) async {
     try {
+      // Überprüfe zuerst die Berechtigung
+      final bool hasPermission = await checkAndRequestNotificationPermissions();
+      
+      if (!hasPermission) {
+        throw NotificationException('Benachrichtigungsberechtigungen nicht erteilt');
+      }
+      
       // Konfiguriere Android-Details
       const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-        'frost_warning_channel',
+        frostWarningChannelId,
         'Frost-Warnungen',
         channelDescription: 'Benachrichtigungen über Frostgefahr',
         importance: Importance.high,
         priority: Priority.high,
         enableVibration: true,
+        icon: '@mipmap/ic_launcher',
       );
       
       // Konfiguriere iOS-Details
@@ -78,8 +136,10 @@ class NotificationService {
         title,
         body,
         platformDetails,
+        payload: 'frost_warning',
       );
     } catch (e) {
+      debugPrint('Fehler beim Senden der Frostwarnung: $e');
       throw NotificationException('Fehler beim Senden der Frostwarnung: $e');
     }
   }
@@ -102,6 +162,13 @@ class NotificationService {
   // Plane tägliche Überprüfung
   Future<void> scheduleDailyCheck(int hour, int minute) async {
     try {
+      // Überprüfe zuerst die Berechtigung
+      final bool hasPermission = await checkAndRequestNotificationPermissions();
+      
+      if (!hasPermission) {
+        throw NotificationException('Benachrichtigungsberechtigungen nicht erteilt');
+      }
+      
       // Lösche vorherige geplante Benachrichtigungen
       await flutterLocalNotificationsPlugin.cancelAll();
       
@@ -111,7 +178,7 @@ class NotificationService {
       // Konfiguriere Benachrichtigungsdetails (niedrigere Priorität für Hintergrundaufgaben)
       const notificationDetails = NotificationDetails(
           android: AndroidNotificationDetails(
-            'daily_check_channel',
+            dailyCheckChannelId,
             'Tägliche Überprüfungen',
             channelDescription: 'Hintergrundüberprüfungen der Wettervorhersage',
             importance: Importance.low,
@@ -133,12 +200,13 @@ class NotificationService {
         'Überprüfung der Wettervorhersage auf Frost',
         scheduledTime,
         notificationDetails,
-        androidAllowWhileIdle: true,
         uiLocalNotificationDateInterpretation:
             UILocalNotificationDateInterpretation.absoluteTime,
         matchDateTimeComponents: DateTimeComponents.time,
+        androidScheduleMode: AndroidScheduleMode.exact,
       );
     } catch (e) {
+      debugPrint('Fehler beim Planen der täglichen Überprüfung: $e');
       throw NotificationException('Fehler beim Planen der täglichen Überprüfung: $e');
     }
   }

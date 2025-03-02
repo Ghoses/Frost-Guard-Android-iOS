@@ -206,8 +206,8 @@ class _AddLocationDialogState extends State<AddLocationDialog> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         ElevatedButton(
-          child: const Text('Aktuellen Standort hinzufügen'),
           onPressed: _isSearching ? null : _addCurrentLocation,
+          child: const Text('Aktuellen Standort hinzufügen'),
         ),
       ],
     );
