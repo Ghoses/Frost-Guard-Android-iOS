@@ -156,38 +156,58 @@ class _HomeScreenState extends State<HomeScreen> {
             }
             
             // Standorte vorhanden - zeige Wetterkarten
-            return ListView(
+            return ReorderableListView.builder(
               padding: const EdgeInsets.all(ThemeConstants.normalPadding),
-              children: [
-                // Wetterkarten für alle Standorte
-                ...locationProvider.locations.map((location) {
-                  bool hasFrostWarning = weatherProvider.hasFrostWarning(location.id);
-                  return WeatherCard(
-                    location: location,
-                    weatherData: weatherProvider.getWeatherFor(location.id),
-                    hasFrostWarning: hasFrostWarning,
-                    onDelete: () async {
-                      await locationProvider.removeLocation(location.id);
-                    },
-                  );
-                }).toList(),
-                
-                Padding(
-                  padding: const EdgeInsets.only(top: ThemeConstants.normalPadding),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Aktualisiert: ${_getLastUpdatedText(weatherProvider.lastUpdated)}',
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontSize: 12,
+              itemCount: locationProvider.locations.length + 1, // +1 für den "Aktualisiert" Text
+              onReorder: (oldIndex, newIndex) {
+                // Ignoriere den letzten Eintrag (Aktualisiert-Text)
+                if (oldIndex >= locationProvider.locations.length || 
+                    newIndex >= locationProvider.locations.length) {
+                  return;
+                }
+                locationProvider.reorderLocations(oldIndex, newIndex);
+              },
+              itemBuilder: (context, index) {
+                // Der letzte Index ist für den "Aktualisiert" Text
+                if (index == locationProvider.locations.length) {
+                  return Padding(
+                    key: const ValueKey('updated-text'),
+                    padding: const EdgeInsets.only(top: ThemeConstants.normalPadding),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Aktualisiert: ${_getLastUpdatedText(weatherProvider.lastUpdated)}',
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.refresh, size: 16),
+                          onPressed: _refreshData,
+                          tooltip: 'Aktualisieren',
+                          iconSize: 16,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          splashRadius: 16,
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                
+                // Ansonsten zeige die Wetterkarte
+                final location = locationProvider.locations[index];
+                bool hasFrostWarning = weatherProvider.hasFrostWarning(location.id);
+                return WeatherCard(
+                  key: ValueKey(location.id),
+                  location: location,
+                  weatherData: weatherProvider.getWeatherFor(location.id),
+                  hasFrostWarning: hasFrostWarning,
+                  onDelete: () async {
+                    await locationProvider.removeLocation(location.id);
+                  },
+                );
+              },
             );
           },
         ),

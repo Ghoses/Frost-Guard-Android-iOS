@@ -8,7 +8,7 @@ import 'package:frost_guard/core/constants/theme_constants.dart';
 import 'package:provider/provider.dart';
 import 'package:frost_guard/providers/settings_provider.dart';
 
-class WeatherCard extends StatelessWidget {
+class WeatherCard extends StatefulWidget {
   final Location location;
   final WeatherData? weatherData;
   final bool hasFrostWarning;
@@ -23,37 +23,79 @@ class WeatherCard extends StatelessWidget {
   }) : super(key: key);
 
   @override
+  State<WeatherCard> createState() => _WeatherCardState();
+}
+
+class _WeatherCardState extends State<WeatherCard> {
+  bool _isExpanded = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final settingsProvider = Provider.of<SettingsProvider>(context);
     final temperatureUnit = settingsProvider.temperatureUnit;
     
-    return Card(
-      margin: const EdgeInsets.only(bottom: ThemeConstants.normalPadding),
-      color: hasFrostWarning 
-          ? (theme.brightness == Brightness.dark 
-              ? ThemeConstants.frostWarningDarkColor 
-              : ThemeConstants.frostWarningLightColor)
-          : null,
-      child: Padding(
-        padding: const EdgeInsets.all(ThemeConstants.normalPadding),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(context, theme),
-            if (hasFrostWarning)
-              _buildFrostWarningMessage(context, theme, settingsProvider),
-            if (weatherData == null || weatherData!.daily.isEmpty)
-              _buildLoadingState(theme)
-            else
-              _buildWeatherContent(context, theme, temperatureUnit),
-          ],
+    return Dismissible(
+      key: Key(widget.location.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20.0),
+        color: Colors.red,
+        child: const Icon(
+          Icons.delete,
+          color: Colors.white,
+        ),
+      ),
+      onDismissed: (direction) {
+        widget.onDelete();
+      },
+      child: Card(
+        margin: const EdgeInsets.only(bottom: ThemeConstants.normalPadding),
+        color: widget.hasFrostWarning 
+            ? (theme.brightness == Brightness.dark 
+                ? ThemeConstants.frostWarningDarkColor 
+                : ThemeConstants.frostWarningLightColor)
+            : null,
+        child: InkWell(
+          onTap: () {
+            setState(() {
+              _isExpanded = !_isExpanded;
+            });
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(ThemeConstants.normalPadding),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(context, theme, temperatureUnit),
+                if (_isExpanded) ...[
+                  if (widget.hasFrostWarning)
+                    _buildFrostWarningMessage(context, theme, settingsProvider),
+                  if (widget.weatherData == null || widget.weatherData!.daily.isEmpty)
+                    _buildLoadingState(theme)
+                  else
+                    _buildWeatherContent(context, theme, temperatureUnit),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildHeader(BuildContext context, ThemeData theme) {
+  Widget _buildHeader(BuildContext context, ThemeData theme, String temperatureUnit) {
+    // Tiefsttemperatur für den kompakten Zustand
+    double? minTemp;
+    if (widget.weatherData != null && widget.weatherData!.daily.isNotEmpty) {
+      final today = widget.weatherData!.daily[0];
+      minTemp = TemperatureUtils.getTemperatureInUnit(
+        today.temp.min, 
+        temperatureUnit
+      );
+    }
+    
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -61,22 +103,22 @@ class WeatherCard extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                location.isCurrentLocation 
+                widget.location.isCurrentLocation 
                     ? Icons.my_location 
                     : Icons.location_on,
-                color: hasFrostWarning 
+                color: widget.hasFrostWarning 
                     ? ThemeConstants.frostWarningColor
                     : theme.colorScheme.primary,
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  location.name,
+                  widget.location.name,
                   style: theme.textTheme.titleMedium!.copyWith(
-                    color: hasFrostWarning 
+                    color: widget.hasFrostWarning 
                         ? ThemeConstants.frostWarningColor
                         : null,
-                    fontWeight: hasFrostWarning ? FontWeight.bold : null,
+                    fontWeight: widget.hasFrostWarning ? FontWeight.bold : null,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -84,13 +126,41 @@ class WeatherCard extends StatelessWidget {
             ],
           ),
         ),
-        IconButton(
-          icon: const Icon(Icons.delete_outline),
-          onPressed: onDelete,
-          tooltip: 'Standort entfernen',
-        ),
+        if (!_isExpanded && minTemp != null)
+          Text(
+            TemperatureUtils.formatTemperature(minTemp, temperatureUnit),
+            style: theme.textTheme.titleMedium!.copyWith(
+              color: _isTempBelowThreshold(minTemp, context) 
+                  ? ThemeConstants.frostWarningColor 
+                  : null,
+              fontWeight: _isTempBelowThreshold(minTemp, context) 
+                  ? FontWeight.bold 
+                  : null,
+            ),
+          ),
+        if (_isExpanded)
+          Icon(
+            Icons.keyboard_arrow_up,
+            color: theme.colorScheme.onSurface.withOpacity(0.6),
+          )
+        else
+          Icon(
+            Icons.keyboard_arrow_down,
+            color: theme.colorScheme.onSurface.withOpacity(0.6),
+          ),
       ],
     );
+  }
+
+  bool _isTempBelowThreshold(double temperature, BuildContext context) {
+    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+    final threshold = settingsProvider.temperatureThreshold;
+    
+    if (settingsProvider.temperatureUnit == 'fahrenheit') {
+      return temperature < TemperatureUtils.celsiusToFahrenheit(threshold);
+    }
+    
+    return temperature < threshold;
   }
 
   Widget _buildFrostWarningMessage(BuildContext context, ThemeData theme, SettingsProvider settingsProvider) {
@@ -116,7 +186,7 @@ class WeatherCard extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          'Es wird heute Nacht in ${location.name} Frost geben. Die Temperatur wird voraussichtlich unter den eingestellten Schwellenwert von ${TemperatureUtils.formatTemperature(settingsProvider.temperatureThreshold, settingsProvider.temperatureUnit)} fallen.',
+          'Es wird heute Nacht in ${widget.location.name} Frost geben. Die Temperatur wird voraussichtlich unter den eingestellten Schwellenwert von ${TemperatureUtils.formatTemperature(settingsProvider.temperatureThreshold, settingsProvider.temperatureUnit)} fallen.',
           style: theme.textTheme.bodyMedium!.copyWith(
             color: theme.brightness == Brightness.dark 
                 ? Colors.white70 
@@ -155,12 +225,12 @@ class WeatherCard extends StatelessWidget {
   }
 
   Widget _buildWeatherContent(BuildContext context, ThemeData theme, String temperatureUnit) {
-    if (weatherData!.daily.isEmpty) {
+    if (widget.weatherData!.daily.isEmpty) {
       return const SizedBox.shrink();
     }
 
     final weatherService = WeatherService();
-    final today = weatherData!.daily[0];
+    final today = widget.weatherData!.daily[0];
     final currentCondition = today.weather.isNotEmpty ? today.weather[0] : null;
     
     // Temperaturen in der korrekten Einheit
@@ -293,9 +363,11 @@ class WeatherCard extends StatelessWidget {
 
   Widget _buildForecastSection(BuildContext context, ThemeData theme, String temperatureUnit) {
     // Begrenze auf 3 Tage und überspringe den heutigen Tag
-    final forecasts = weatherData!.daily.length > 3 
-        ? weatherData!.daily.sublist(1, 4) 
-        : weatherData!.daily.sublist(1);
+    final forecasts = widget.weatherData!.daily.length > 3 
+        ? widget.weatherData!.daily.sublist(1, 4) 
+        : widget.weatherData!.daily.sublist(1);
+        
+    final weatherService = WeatherService();
         
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -332,7 +404,7 @@ class WeatherCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   if (weatherIcon.isNotEmpty)
                     Image.network(
-                      WeatherService().getWeatherIconUrl(weatherIcon),
+                      weatherService.getWeatherIconUrl(weatherIcon),
                       width: 40,
                       height: 40,
                       errorBuilder: (_, __, ___) => const Icon(Icons.error, size: 40),

@@ -106,6 +106,27 @@ class LocationProvider with ChangeNotifier {
     }
   }
   
+  // Standorte neu anordnen
+  Future<void> reorderLocations(int oldIndex, int newIndex) async {
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+    
+    final location = _locations.removeAt(oldIndex);
+    _locations.insert(newIndex, location);
+    notifyListeners();
+    
+    try {
+      await _storageService.saveLocations(_locations);
+    } catch (e) {
+      // Bei Fehler die ursprüngliche Reihenfolge wiederherstellen
+      _setError('Fehler beim Speichern der neuen Reihenfolge: $e');
+      final location = _locations.removeAt(newIndex);
+      _locations.insert(oldIndex, location);
+      notifyListeners();
+    }
+  }
+  
   // Standorte nach Namen suchen
   Future<List<Location>> searchLocations(String query) async {
     if (query.isEmpty) {
