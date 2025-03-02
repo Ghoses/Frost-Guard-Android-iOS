@@ -181,64 +181,168 @@ class SettingsScreen extends StatelessWidget {
       child: Column(
         children: [
           SwitchListTile(
-            title: const Text('Benachrichtigungen'),
-            subtitle: const Text('Erhalten Sie Benachrichtigungen bei Frostgefahr'),
+            title: const Text('Frostwarnungen aktivieren'),
+            subtitle: const Text('Erhalte Benachrichtigungen, wenn Frost zu erwarten ist'),
             value: settingsProvider.notificationsEnabled,
-            onChanged: (value) => settingsProvider.setNotificationsEnabled(value),
-          ),
-          if (settingsProvider.notificationsEnabled)
-            Padding(
-              padding: const EdgeInsets.only(
-                left: ThemeConstants.normalPadding,
-                right: ThemeConstants.normalPadding,
-                bottom: ThemeConstants.normalPadding,
-              ),
-              child: ElevatedButton.icon(
-                onPressed: () async {
-                  try {
-                    // Überprüfe Berechtigungen vor dem Senden
-                    final bool hasPermission = await NotificationService().checkAndRequestNotificationPermissions();
-                    
-                    if (!hasPermission) {
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Benachrichtigungen wurden nicht zugelassen. Bitte aktiviere sie in den Geräteeinstellungen.'),
-                          duration: Duration(seconds: 4),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                      return;
-                    }
-                    
-                    // Sende Test-Benachrichtigung
-                    await NotificationService().showTestNotification();
-                    
+            onChanged: (value) async {
+              try {
+                if (value) {
+                  // Wenn Benachrichtigungen aktiviert werden, überprüfe die Berechtigung
+                  final hasPermission = await NotificationService().checkAndRequestNotificationPermissions();
+                  if (!hasPermission) {
                     if (!context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
-                        content: Text('Test-Benachrichtigung gesendet'),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                  } catch (e) {
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Fehler: ${e.toString()}'),
-                        duration: const Duration(seconds: 4),
+                        content: Text('Benachrichtigungen wurden nicht zugelassen. Bitte aktiviere sie in den Geräteeinstellungen.'),
+                        duration: Duration(seconds: 4),
                         backgroundColor: Colors.red,
                       ),
                     );
+                    return;
                   }
-                },
-                icon: const Icon(Icons.notifications),
-                label: const Text('Test Benachrichtigung'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.secondary,
+                }
+                
+                // Setze den Wert
+                settingsProvider.setNotificationsEnabled(value);
+                
+                // Wenn aktiviert, aktualisiere den Zeitplan
+                if (value) {
+                  await NotificationService().scheduleDailyCheck(
+                    settingsProvider.checkHour,
+                    settingsProvider.checkMinute,
+                  );
+                  
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Benachrichtigungen aktiviert'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                } else {
+                  // Wenn deaktiviert, lösche alle Benachrichtigungen
+                  await NotificationService().cancelAllNotifications();
+                  
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Benachrichtigungen deaktiviert'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Fehler: ${e.toString()}'),
+                    duration: const Duration(seconds: 4),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+          ),
+          Padding(
+            padding: const EdgeInsets.all(ThemeConstants.normalPadding),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    try {
+                      // Überprüfe zuerst die Berechtigung
+                      final hasPermission = await NotificationService().checkAndRequestNotificationPermissions();
+                      
+                      if (!hasPermission) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Benachrichtigungen wurden nicht zugelassen. Bitte aktiviere sie in den Geräteeinstellungen.'),
+                            duration: Duration(seconds: 4),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      
+                      // Sende Test-Benachrichtigung
+                      await NotificationService().showTestNotification();
+                      
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Test-Benachrichtigung gesendet'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    } catch (e) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Fehler: ${e.toString()}'),
+                          duration: const Duration(seconds: 4),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.notifications),
+                  label: const Text('Test Notify'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.secondary,
+                  ),
                 ),
-              ),
+                
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    try {
+                      // Überprüfe zuerst die Berechtigung
+                      final hasPermission = await NotificationService().checkAndRequestNotificationPermissions();
+                      
+                      if (!hasPermission) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Benachrichtigungen wurden nicht zugelassen. Bitte aktiviere sie in den Geräteeinstellungen.'),
+                            duration: Duration(seconds: 4),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                        return;
+                      }
+                      
+                      // Teste Frost-Benachrichtigung
+                      await NotificationService().testFrostNotification();
+                      
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Frostwarnung gesendet'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    } catch (e) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Fehler: ${e.toString()}'),
+                          duration: const Duration(seconds: 4),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.ac_unit),
+                  label: const Text('Test Frosty'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
             ),
+          ),
         ],
       ),
     );

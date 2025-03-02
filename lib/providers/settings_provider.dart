@@ -70,16 +70,33 @@ class SettingsProvider with ChangeNotifier {
   }
 
   Future<void> setCheckTime(int hour, int minute) async {
-    _settings = _settings.copyWith(checkHour: hour, checkMinute: minute);
-    notifyListeners();
-    
-    // Aktualisiere den Zeitplan für Benachrichtigungen
-    if (_settings.notificationsEnabled) {
-      await _notificationService.cancelAllNotifications();
-      await _notificationService.scheduleDailyCheck(hour, minute);
+    try {
+      debugPrint('Setze Überprüfungszeit auf $hour:$minute');
+      
+      // Aktualisiere Einstellungen
+      _settings = _settings.copyWith(checkHour: hour, checkMinute: minute);
+      notifyListeners();
+      
+      // Speichere Einstellungen
+      await _saveSettings();
+      
+      // Aktualisiere den Zeitplan für Benachrichtigungen
+      if (_settings.notificationsEnabled) {
+        debugPrint('Benachrichtigungen sind aktiviert, aktualisiere Zeitplan');
+        
+        // Lösche vorherige Benachrichtigungen
+        await _notificationService.cancelAllNotifications();
+        
+        // Plane neue Benachrichtigung
+        await _notificationService.scheduleDailyCheck(hour, minute);
+        
+        debugPrint('Benachrichtigungen für $hour:$minute Uhr neu geplant');
+      } else {
+        debugPrint('Benachrichtigungen sind deaktiviert, kein Zeitplan erstellt');
+      }
+    } catch (e) {
+      debugPrint('Fehler beim Setzen der Überprüfungszeit: $e');
     }
-    
-    await _saveSettings();
   }
   
   Future<void> _saveSettings() async {

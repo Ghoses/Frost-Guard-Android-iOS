@@ -1,43 +1,55 @@
 // Benachrichtigungsdienst für Frost Guard
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_local_notifications_platform_interface/flutter_local_notifications_platform_interface.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
+import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:frost_guard/core/constants/app_constants.dart';
-import 'package:frost_guard/core/errors/exceptions.dart';
-import 'dart:io' show Platform;
-import 'package:flutter/material.dart';
+
+// Konstanten für Benachrichtigungskanäle
+const String frostWarningChannelId = AppConstants.FROST_WARNING_CHANNEL_ID;
+const String dailyCheckChannelId = AppConstants.DAILY_CHECK_CHANNEL_ID;
+
+// Eigene Exception-Klasse für Benachrichtigungsfehler
+class NotificationException implements Exception {
+  final String message;
+  NotificationException(this.message);
+  
+  @override
+  String toString() => 'NotificationException: $message';
+}
 
 class NotificationService {
+  // Singleton-Instanz
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
-  NotificationService._internal() {
-    _initAppLifecycleListener();
-  }
-
-  // App-Zustandsverfolgung
-  bool _isAppInForeground = true;
-  late final AppLifecycleListener _lifecycleListener;
-
-  // Initialisiere den App-Lifecycle-Listener
-  void _initAppLifecycleListener() {
-    _lifecycleListener = AppLifecycleListener(
-      onStateChange: (AppLifecycleState state) {
-        _isAppInForeground = state == AppLifecycleState.resumed;
-        debugPrint('App-Zustand geändert: ${state.name}, im Vordergrund: $_isAppInForeground');
-      },
-    );
-  }
-
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+  NotificationService._internal();
+  
+  // Instanz des Flutter Local Notifications Plugins
+  static final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = 
       FlutterLocalNotificationsPlugin();
   
-  // Definiere die Kanal-IDs
-  static const String frostWarningChannelId = 'frost_warning_channel';
-  static const String dailyCheckChannelId = 'daily_check_channel';
+  // Zustand der App (im Vordergrund oder nicht)
+  bool _isAppInForeground = false;
+  
+  // Initialisiere App-Lebenszyklus-Listener
+  void _initAppLifecycleListener() {
+    // Wird durch das WidgetsBindingObserver in der MainApp implementiert
+    debugPrint('App-Lebenszyklus-Listener initialisiert');
+  }
+  
+  // Setze den App-Vordergrund-Status
+  void setAppInForeground(bool isInForeground) {
+    _isAppInForeground = isInForeground;
+    debugPrint('App-Zustand geändert: ${_isAppInForeground ? 'im Vordergrund' : 'im Hintergrund'}');
+  }
   
   // Initialisiere Benachrichtigungen
   Future<void> initNotifications() async {
+    debugPrint('Initialisiere Benachrichtigungen');
+    
     try {
       // Initialisiere Zeitzonen
       tz.initializeTimeZones();
@@ -87,124 +99,154 @@ class NotificationService {
       // Initialisiere Plugin
       await flutterLocalNotificationsPlugin.initialize(
         initializationSettings,
-        onDidReceiveNotificationResponse: (details) {
-          debugPrint('Notification clicked: ${details.payload}');
+        onDidReceiveNotificationResponse: (NotificationResponse response) {
+          _onNotificationResponse(response);
         },
       );
       
     } catch (e) {
-      throw NotificationException('Fehler bei der Initialisierung der Benachrichtigungen: $e');
+      debugPrint('Fehler bei der Initialisierung der Benachrichtigungen: $e');
+      throw NotificationException('Fehler bei der Initialisierung: $e');
     }
   }
   
-  // Überprüfe und fordere Berechtigungen an
-  Future<bool> checkAndRequestNotificationPermissions() async {
-    try {
-      if (Platform.isAndroid) {
-        // Prüfe, ob die Android-Version >= 13 (API 33) ist
-        final AndroidFlutterLocalNotificationsPlugin? androidPlugin = 
-            flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-        
-        if (androidPlugin != null) {
-          final bool? areEnabled = await androidPlugin.areNotificationsEnabled();
-          
-          // Wenn Berechtigungen nicht aktiviert sind, zeige Hinweis
-          if (areEnabled == false) {
-            debugPrint('Benachrichtigungen sind nicht aktiviert. Bitte in den Einstellungen aktivieren.');
-            // In Android 13+ können wir nicht direkt Berechtigungen anfordern, 
-            // wir zeigen nur einen Hinweis an und der Benutzer muss selbst die Einstellungen öffnen
-            return false;
-          }
-          return areEnabled ?? false;
-        }
-      } else if (Platform.isIOS) {
-        // Auf iOS/Darwin können wir einfach true zurückgeben, da die Berechtigungen
-        // beim ersten Aufruf automatisch angefordert werden und im AppDelegate.swift behandelt werden
-        debugPrint('iOS-Benachrichtigungen werden beim ersten Aufruf automatisch angefordert');
-        return true;
-      }
-      return false;
-    } catch (e) {
-      debugPrint('Fehler bei der Berechtigungsanfrage: $e');
-      return false;
+  // Handler für Benachrichtigungsantworten
+  void _onNotificationResponse(NotificationResponse details) {
+    debugPrint('Benachrichtigungsantwort empfangen: ${details.payload}');
+    
+    // Wenn die Benachrichtigung für eine Frost-Überprüfung ist, führe diese durch
+    if (details.payload == 'checking_frost' || details.payload == 'check_frost') {
+      debugPrint('Löse Frost-Überprüfung aus Benachrichtigungsantwort aus');
+      _performFrostCheck();
     }
   }
   
-  // Sende eine Frostwarnung
-  Future<void> showFrostWarning(String title, String body, {bool forceShow = false}) async {
-    try {
-      // Nur senden, wenn App im Hintergrund oder explizit erzwungen (Test-Button)
-      if (!_isAppInForeground || forceShow) {
-        debugPrint('Sende Benachrichtigung: $title (forceShow: $forceShow, imVordergrund: $_isAppInForeground)');
-        
-        // Überprüfe zuerst die Berechtigung
-        final bool hasPermission = await checkAndRequestNotificationPermissions();
-        
-        if (!hasPermission) {
-          throw NotificationException('Benachrichtigungsberechtigungen nicht erteilt');
-        }
-        
-        // Konfiguriere Android-Details
-        final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-          frostWarningChannelId,
-          'Frostwarnungen',
-          channelDescription: 'Benachrichtigungen über Frostgefahr',
-          importance: Importance.high,
-          priority: Priority.high,
-          enableVibration: true,
-          icon: '@mipmap/ic_launcher',
-        );
-        
-        // Konfiguriere iOS-Details mit besserer Sichtbarkeit
-        final DarwinNotificationDetails iOSDetails = DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
-          badgeNumber: 1,
-          interruptionLevel: InterruptionLevel.timeSensitive, // Höher priorisiert
-          categoryIdentifier: frostWarningChannelId,
-          threadIdentifier: 'frost_warnings',
-        );
-        
-        // Kombiniere Plattform-Details
-        final NotificationDetails platformDetails = NotificationDetails(
-          android: androidDetails,
-          iOS: iOSDetails,
-        );
-        
-        // Zeige Benachrichtigung
-        await flutterLocalNotificationsPlugin.show(
-          _generateNotificationId(), // Dynamische Notification ID
-          title,
-          body,
-          platformDetails,
-          payload: 'frost_warning',
-        );
-      } else {
-        debugPrint('Benachrichtigung unterdrückt (App im Vordergrund): $title');
-      }
-    } catch (e) {
-      debugPrint('Fehler beim Senden der Frostwarnung: $e');
-      throw NotificationException('Fehler beim Senden der Frostwarnung: $e');
-    }
-  }
-  
-  // Generiere eine eindeutige ID für Benachrichtigungen
-  int _generateNotificationId() {
-    return DateTime.now().millisecondsSinceEpoch.remainder(100000);
-  }
-  
-  // Methode für den Test-Button
-  Future<void> showTestNotification() async {
-    await showFrostWarning(
-      'Test: Frostwarnung', 
-      'Dies ist eine Test-Benachrichtigung. Die Benachrichtigungsfunktion funktioniert!',
+  // Führe die Frost-Überprüfung durch
+  void _performFrostCheck() {
+    debugPrint('Führe Frost-Überprüfung durch');
+    // Löse den statischen Callback aus
+    triggerFrostCheck();
+    
+    // Zeige eine Benachrichtigung an, dass die Überprüfung läuft
+    showFrostWarning(
+      'Frostwächter aktiv', 
+      'Überprüfe Wettervorhersage auf Frostgefahr...',
       forceShow: true
     );
   }
   
-  // Sende eine Frostwarnung für einen bestimmten Ort
+  // Registriere einen Callback für die Frost-Überprüfung
+  static Function? _frostCheckCallback;
+  
+  // Setze den Callback für die Frost-Überprüfung
+  static void setFrostCheckCallback(Function callback) {
+    _frostCheckCallback = callback;
+    debugPrint('Frost-Überprüfungs-Callback registriert');
+  }
+  
+  // Löse die Frost-Überprüfung aus
+  static void triggerFrostCheck() {
+    debugPrint('Löse Frost-Überprüfung aus');
+    if (_frostCheckCallback != null) {
+      _frostCheckCallback!();
+    } else {
+      debugPrint('Kein Frost-Überprüfungs-Callback registriert');
+    }
+  }
+  
+  // Überprüfe und beantrage Berechtigungen für Benachrichtigungen
+  Future<bool> checkAndRequestNotificationPermissions() async {
+    try {
+      // Überprüfe aktuelle Berechtigungen
+      final AndroidFlutterLocalNotificationsPlugin? androidPlugin = 
+          flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+          
+      if (androidPlugin != null) {
+        final bool? areEnabled = await androidPlugin.areNotificationsEnabled();
+        return areEnabled ?? false;
+      }
+      
+      // Für iOS/andere Plattformen
+      return true;
+    } catch (e) {
+      debugPrint('Fehler beim Überprüfen der Benachrichtigungsberechtigungen: $e');
+      return false;
+    }
+  }
+  
+  // Zeige eine Frostwarnung an
+  Future<void> showFrostWarning(String title, String body, {bool forceShow = false}) async {
+    debugPrint('Zeige Frostwarnung an: $title - $body, Force: $forceShow');
+    
+    // Wenn die App im Vordergrund ist und nicht erzwungen wird, keine Benachrichtigung anzeigen
+    if (_isAppInForeground && !forceShow) {
+      debugPrint('App ist im Vordergrund, überspringe Benachrichtigung');
+      return;
+    }
+    
+    // Android-spezifische Einstellungen
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      frostWarningChannelId,
+      'Frostwarnungen',
+      channelDescription: 'Warnungen vor Frost an Ihren Standorten',
+      importance: Importance.high,  // Wichtigkeit erhöht
+      priority: Priority.high,      // Priorität erhöht
+      playSound: true,              // Sound aktiviert
+      enableVibration: true,        // Vibration aktiviert
+      icon: '@mipmap/ic_launcher',
+      largeIcon: DrawableResourceAndroidBitmap('@mipmap/ic_launcher'),
+      // Stellt sicher, dass die Benachrichtigung auch angezeigt wird, wenn Bildschirm gesperrt ist
+      fullScreenIntent: true,
+    );
+    
+    // iOS-spezifische Einstellungen
+    const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+      presentAlert: true,   // Zeigt eine Alert-Nachricht an
+      presentBadge: true,   // Aktualisiert das App-Badge
+      presentSound: true,   // Spielt einen Sound ab
+      sound: 'default',     // Verwendet den Standard-Sound
+      badgeNumber: 1,       // Setzt das Badge auf 1
+      // Sorgt dafür, dass die Benachrichtigung kritisch ist und DND umgeht
+      interruptionLevel: InterruptionLevel.timeSensitive,
+    );
+    
+    // Kombiniere Plattform-Einstellungen
+    const NotificationDetails platformDetails = NotificationDetails(
+      android: androidDetails,
+      iOS: iosDetails,
+    );
+    
+    // Zeige die Benachrichtigung an
+    await flutterLocalNotificationsPlugin.show(
+      _generateNotificationId(),  // Eindeutige ID für jede Benachrichtigung
+      title,
+      body,
+      platformDetails,
+      payload: 'frost_warning',
+    );
+  }
+  
+  // Generiert eine eindeutige ID für Benachrichtigungen
+  static int _generateNotificationId() {
+    return DateTime.now().millisecondsSinceEpoch % 10000;
+  }
+  
+  // Zeige eine Test-Benachrichtigung an
+  Future<void> showTestNotification() async {
+    debugPrint('Zeige Test-Benachrichtigung an');
+    
+    // Zeige immer eine Test-Benachrichtigung an, auch wenn App im Vordergrund
+    await showFrostWarning(
+      'Test-Benachrichtigung', 
+      'Dies ist ein Test der Benachrichtigungsfunktion.',
+      forceShow: true
+    );
+  }
+  
+  // Zeige eine Frostwarnung für einen bestimmten Standort an
   Future<void> showFrostWarningNotification(String locationName, double temperature) async {
+    debugPrint('Zeige Frostwarnung für $locationName an: ${temperature.toStringAsFixed(1)}°C');
+    
     final String title = 'Frostwarnung für $locationName';
     final String body = 'Die Temperatur wird voraussichtlich auf ${temperature.toStringAsFixed(1)}°C fallen.';
     await showFrostWarning(title, body);
@@ -213,72 +255,111 @@ class NotificationService {
   // Plane tägliche Überprüfung
   Future<void> scheduleDailyCheck(int hour, int minute) async {
     try {
+      debugPrint('Plane tägliche Überprüfung für $hour:$minute Uhr');
+      
       // Überprüfe zuerst die Berechtigung
       final bool hasPermission = await checkAndRequestNotificationPermissions();
       
       if (!hasPermission) {
+        debugPrint('Keine Berechtigung für Benachrichtigungen');
         throw NotificationException('Benachrichtigungsberechtigungen nicht erteilt');
       }
       
       // Lösche vorherige geplante Benachrichtigungen
       await flutterLocalNotificationsPlugin.cancelAll();
+      debugPrint('Vorherige Benachrichtigungen gelöscht');
       
       // Erstelle eine Zeit für die tägliche Überprüfung
       final tz.TZDateTime scheduledTime = _nextInstanceOfTime(hour, minute);
+      debugPrint('Berechnete nächste Zeit: ${scheduledTime.toString()}');
+      debugPrint('Nächste geplante Zeit: ${scheduledTime.toString()}');
       
-      // iOS-spezifische Einstellungen für Hintergrundbenachrichtigungen
-      final DarwinNotificationDetails darwinNotificationDetails = DarwinNotificationDetails(
-        presentAlert: false, // Hintergrundüberprüfungen sollen nicht sichtbar sein
-        presentBadge: false,
-        presentSound: false,
-        categoryIdentifier: dailyCheckChannelId,
-        threadIdentifier: 'daily_checks',
+      // Android-spezifische Einstellungen
+      const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+        dailyCheckChannelId,
+        'Tägliche Überprüfungen',
+        channelDescription: 'Hintergrundüberprüfungen der Wettervorhersage',
+        importance: Importance.high,  // Wichtigkeit erhöht
+        priority: Priority.high,      // Priorität erhöht
+        playSound: true,              // Sound aktiviert
+        enableVibration: true,        // Vibration aktiviert
+        icon: '@mipmap/ic_launcher',
+        // Wichtig: Stelle sicher, dass die Benachrichtigung auch im Vordergrund angezeigt wird
+        fullScreenIntent: true,       // Volle Bildschirmabsicht
       );
       
-      // Konfiguriere Benachrichtigungsdetails (niedrigere Priorität für Hintergrundaufgaben)
-      final NotificationDetails notificationDetails = NotificationDetails(
-          android: const AndroidNotificationDetails(
-            dailyCheckChannelId,
-            'Tägliche Überprüfungen',
-            channelDescription: 'Hintergrundüberprüfungen der Wettervorhersage',
-            importance: Importance.low,
-            priority: Priority.low,
-            playSound: false,
-            enableVibration: false,
-          ),
-          iOS: darwinNotificationDetails,
+      // iOS-spezifische Einstellungen
+      const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+        presentAlert: true,   // Zeigt eine Alert-Nachricht an
+        presentBadge: true,   // Aktualisiert das App-Badge
+        presentSound: true,   // Spielt einen Sound ab
+        sound: 'default',     // Verwendet den Standard-Sound
+        // Umgeht Do Not Disturb für wichtige Benachrichtigungen
+        interruptionLevel: InterruptionLevel.active,
+      );
+      
+      // Kombiniere Plattform-Einstellungen
+      const NotificationDetails platformDetails = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+      
+      // Versuche zuerst, einen exakten Zeitplan zu verwenden
+      try {
+        await flutterLocalNotificationsPlugin.zonedSchedule(
+          AppConstants.DAILY_CHECK_ID,
+          'Frost-Überprüfung',
+          'Überprüfe Wettervorhersage auf Frostgefahr',
+          scheduledTime,
+          platformDetails,
+          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+          matchDateTimeComponents: DateTimeComponents.time,
+          payload: 'check_frost',
         );
+        
+        debugPrint('Tägliche Überprüfung mit exakter Planung eingerichtet');
+      } catch (e) {
+        // Wenn exakter Zeitplan nicht erlaubt ist, verwende periodischen Zeitplan
+        debugPrint('Exakte Alarme nicht erlaubt, verwende ungefähre Planung: $e');
+        
+        await flutterLocalNotificationsPlugin.periodicallyShow(
+          AppConstants.DAILY_CHECK_ID,
+          'Frost-Überprüfung',
+          'Überprüfe Wettervorhersage auf Frostgefahr',
+          RepeatInterval.daily,
+          platformDetails,
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          payload: 'check_frost',
+        );
+        
+        debugPrint('Tägliche Überprüfung mit ungefährer Planung eingerichtet');
+      }
       
-      // Plane tägliche Benachrichtigung
-      await flutterLocalNotificationsPlugin.zonedSchedule(
-        0, // Notification ID
-        'Wetterüberprüfung',
-        'Überprüfung der Wettervorhersage auf Frost',
-        scheduledTime,
-        notificationDetails,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
-        matchDateTimeComponents: DateTimeComponents.time,
-        androidScheduleMode: AndroidScheduleMode.exact,
-      );
+      debugPrint('Benachrichtigungen für $hour:$minute Uhr neu geplant');
+      
     } catch (e) {
       debugPrint('Fehler beim Planen der täglichen Überprüfung: $e');
       throw NotificationException('Fehler beim Planen der täglichen Überprüfung: $e');
     }
   }
   
-  // Berechne die nächste Instanz der angegebenen Zeit
+  // Berechne die nächste Zeit für eine tägliche Überprüfung
   tz.TZDateTime _nextInstanceOfTime(int hour, int minute) {
-    final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
+    final tz.Location location = tz.UTC;
+    final tz.TZDateTime now = tz.TZDateTime.now(location);
+    debugPrint('Aktuelle Zeit: $now, Zeitzone: ${location.name}');
+    
     tz.TZDateTime scheduledDate = tz.TZDateTime(
-      tz.local,
-      now.year,
-      now.month,
-      now.day,
-      hour,
-      minute,
+      location, 
+      now.year, 
+      now.month, 
+      now.day, 
+      hour, 
+      minute
     );
     
+    // Wenn die Zeit bereits vergangen ist, plane für morgen
     if (scheduledDate.isBefore(now)) {
       scheduledDate = scheduledDate.add(const Duration(days: 1));
     }
@@ -289,5 +370,30 @@ class NotificationService {
   // Lösche alle Benachrichtigungen
   Future<void> cancelAllNotifications() async {
     await flutterLocalNotificationsPlugin.cancelAll();
+  }
+  
+  // Teste die Frostbenachrichtigungen
+  Future<void> testFrostNotification() async {
+    debugPrint('Teste Frostbenachrichtigungen');
+    
+    try {
+      // Simuliere eine Frostwarnung für einen Teststandort
+      // Verwende forceShow: true, um sicherzustellen, dass die Benachrichtigung auch im Vordergrund angezeigt wird
+      await showFrostWarning(
+        "Frostwarnung für Teststandort", 
+        "Die Temperatur wird heute Nacht auf -2,5°C fallen.",
+        forceShow: true
+      );
+      
+      debugPrint('Frostbenachrichtigung erfolgreich angezeigt');
+      
+      // Löse den Frost-Check aus (falls ein Callback registriert ist)
+      NotificationService.triggerFrostCheck();
+    } catch (e) {
+      debugPrint('Fehler beim Testen der Frostbenachrichtigung: $e');
+      throw NotificationException('Fehler beim Testen der Frostbenachrichtigung: $e');
+    }
+    
+    debugPrint('Frostbenachrichtigungstest abgeschlossen');
   }
 }
