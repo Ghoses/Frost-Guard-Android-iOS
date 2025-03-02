@@ -298,7 +298,8 @@ class SettingsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             const Text(
-              'Wetterdaten werden über die OpenWeatherMap API bereitgestellt.',
+              '''Wetterdaten werden über die OpenWeatherMap API bereitgestellt.
+              Scripted by Ghoses 2025 - www.ape-x.net // www.github.com/ghoses''',
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ],
