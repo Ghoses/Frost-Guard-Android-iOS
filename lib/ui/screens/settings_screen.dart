@@ -29,10 +29,7 @@ class SettingsScreen extends StatelessWidget {
               const SizedBox(height: ThemeConstants.largePadding),
               _buildSectionHeader(context, 'Frostwarnungen'),
               _buildThresholdSlider(context, settingsProvider),
-              _buildNotificationSwitch(context, settingsProvider),
-              
-              if (settingsProvider.notificationsEnabled)
-                _buildCheckTimeSelector(context, settingsProvider),
+              _buildNotificationSettings(context, settingsProvider),
               
               const SizedBox(height: ThemeConstants.largePadding),
               _buildSectionHeader(context, 'Über'),
@@ -176,179 +173,144 @@ class SettingsScreen extends StatelessWidget {
     }
   }
 
-  Widget _buildNotificationSwitch(BuildContext context, SettingsProvider settingsProvider) {
-    return Card(
-      child: Column(
-        children: [
-          SwitchListTile(
-            title: const Text('Frostwarnungen aktivieren'),
-            subtitle: const Text('Erhalte Benachrichtigungen, wenn Frost zu erwarten ist'),
-            value: settingsProvider.notificationsEnabled,
-            onChanged: (value) async {
-              try {
-                if (value) {
-                  // Wenn Benachrichtigungen aktiviert werden, überprüfe die Berechtigung
-                  final hasPermission = await NotificationService().checkAndRequestNotificationPermissions();
-                  if (!hasPermission) {
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Benachrichtigungen wurden nicht zugelassen. Bitte aktiviere sie in den Geräteeinstellungen.'),
-                        duration: Duration(seconds: 4),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
-                    return;
-                  }
-                }
-                
-                // Setze den Wert
-                settingsProvider.setNotificationsEnabled(value);
-                
-                // Wenn aktiviert, aktualisiere den Zeitplan
-                if (value) {
-                  await NotificationService().scheduleDailyCheck(
-                    settingsProvider.checkHour,
-                    settingsProvider.checkMinute,
-                  );
-                  
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Benachrichtigungen aktiviert'),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                } else {
-                  // Wenn deaktiviert, lösche alle Benachrichtigungen
-                  await NotificationService().cancelAllNotifications();
-                  
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Benachrichtigungen deaktiviert'),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Fehler: ${e.toString()}'),
-                    duration: const Duration(seconds: 4),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            },
+  Widget _buildNotificationSettings(BuildContext context, SettingsProvider settingsProvider) {
+    final notificationsEnabled = settingsProvider.notificationsEnabled;
+    final checkHour = settingsProvider.checkHour;
+    final checkMinute = settingsProvider.checkMinute;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildNotificationSwitch(context, settingsProvider),
+        if (notificationsEnabled) ...[
+          const SizedBox(height: 16),
+          _buildNotificationTimeSettings(context, settingsProvider),
+        ],
+        const SizedBox(height: 16),
+        Card(
+          elevation: 1,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(
+              color: Theme.of(context).dividerColor.withOpacity(0.5),
+              width: 1,
+            ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(ThemeConstants.normalPadding),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    try {
-                      // Überprüfe zuerst die Berechtigung
-                      final hasPermission = await NotificationService().checkAndRequestNotificationPermissions();
-                      
-                      if (!hasPermission) {
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Benachrichtigungen wurden nicht zugelassen. Bitte aktiviere sie in den Geräteeinstellungen.'),
-                            duration: Duration(seconds: 4),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                        return;
-                      }
-                      
-                      // Sende Test-Benachrichtigung
-                      await NotificationService().showTestNotification();
-                      
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Test-Benachrichtigung gesendet'),
-                          duration: Duration(seconds: 2),
-                        ),
-                      );
-                    } catch (e) {
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Fehler: ${e.toString()}'),
-                          duration: const Duration(seconds: 4),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.notifications),
-                  label: const Text('Test Notify'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.secondary,
-                  ),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      color: Theme.of(context).colorScheme.primary,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Hintergrundprüfung',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
-                
-                ElevatedButton.icon(
-                  onPressed: () async {
-                    try {
-                      // Überprüfe zuerst die Berechtigung
-                      final hasPermission = await NotificationService().checkAndRequestNotificationPermissions();
-                      
-                      if (!hasPermission) {
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Benachrichtigungen wurden nicht zugelassen. Bitte aktiviere sie in den Geräteeinstellungen.'),
-                            duration: Duration(seconds: 4),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                        return;
-                      }
-                      
-                      // Teste Frost-Benachrichtigung
-                      await NotificationService().testFrostNotification();
-                      
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Frostwarnung gesendet'),
-                          duration: Duration(seconds: 2),
-                        ),
-                      );
-                    } catch (e) {
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Fehler: ${e.toString()}'),
-                          duration: const Duration(seconds: 4),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.ac_unit),
-                  label: const Text('Test Frosty'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.error,
-                    foregroundColor: Colors.white,
+                const SizedBox(height: 8),
+                Text(
+                  'Frost Guard überprüft nun die Wetterdaten auch im Hintergrund, '
+                  'selbst wenn die App vollständig geschlossen ist. Die Prüfung erfolgt '
+                  'zur oben eingestellten Zeit und sendet eine Benachrichtigung, '
+                  'wenn Frost erkannt wird.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Hinweis: Auf manchen Geräten können Energiesparfunktionen diese '
+                  'Hintergrundprüfung einschränken. Für optimale Funktion sollten Sie '
+                  'Frost Guard von Batterie-Optimierungen ausschließen.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontStyle: FontStyle.italic,
                   ),
                 ),
               ],
             ),
           ),
-        ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNotificationSwitch(BuildContext context, SettingsProvider settingsProvider) {
+    return Card(
+      child: SwitchListTile(
+        title: const Text('Frostwarnungen aktivieren'),
+        subtitle: const Text('Erhalte Benachrichtigungen, wenn Frost zu erwarten ist'),
+        value: settingsProvider.notificationsEnabled,
+        onChanged: (value) async {
+          try {
+            if (value) {
+              // Wenn Benachrichtigungen aktiviert werden, überprüfe die Berechtigung
+              final hasPermission = await NotificationService().checkAndRequestNotificationPermissions();
+              if (!hasPermission) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Benachrichtigungen wurden nicht zugelassen. Bitte aktiviere sie in den Geräteeinstellungen.'),
+                    duration: Duration(seconds: 4),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+            }
+            
+            // Setze den Wert
+            settingsProvider.setNotificationsEnabled(value);
+            
+            // Wenn aktiviert, aktualisiere den Zeitplan
+            if (value) {
+              await NotificationService().scheduleDailyCheck(
+                settingsProvider.checkHour,
+                settingsProvider.checkMinute,
+              );
+              
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Benachrichtigungen aktiviert'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            } else {
+              // Wenn deaktiviert, lösche alle Benachrichtigungen
+              await NotificationService().cancelAllNotifications();
+              
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Benachrichtigungen deaktiviert'),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+            }
+          } catch (e) {
+            if (!context.mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Fehler: ${e.toString()}'),
+                duration: const Duration(seconds: 4),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        },
       ),
     );
   }
 
-  Widget _buildCheckTimeSelector(BuildContext context, SettingsProvider settingsProvider) {
+  Widget _buildNotificationTimeSettings(BuildContext context, SettingsProvider settingsProvider) {
     // Formatierung der aktuellen Überprüfungszeit
     final hour = settingsProvider.checkHour;
     final minute = settingsProvider.checkMinute;

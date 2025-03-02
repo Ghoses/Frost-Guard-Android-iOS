@@ -27,17 +27,30 @@ class NotificationService {
   factory NotificationService() => _instance;
   NotificationService._internal();
   
-  // Instanz des Flutter Local Notifications Plugins
-  static final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = 
+  // Benachrichtigungsplugin
+  static final FlutterLocalNotificationsPlugin _flutterLocalNotificationsPlugin = 
       FlutterLocalNotificationsPlugin();
   
-  // Zustand der App (im Vordergrund oder nicht)
-  bool _isAppInForeground = false;
+  // Status, ob die App im Vordergrund ist
+  bool _isAppInForeground = true;
   
-  // Initialisiere App-Lebenszyklus-Listener
-  void _initAppLifecycleListener() {
-    // Wird durch das WidgetsBindingObserver in der MainApp implementiert
-    debugPrint('App-Lebenszyklus-Listener initialisiert');
+  // Callback-Funktionen
+  static VoidCallback? _frostCheckCallback;
+  
+  // Setter für den Frost-Check-Callback
+  static void setFrostCheckCallback(VoidCallback callback) {
+    _frostCheckCallback = callback;
+    debugPrint('Frost-Check-Callback gesetzt');
+  }
+  
+  // Funktion zum Auslösen des Frost-Checks
+  static void triggerFrostCheck() {
+    if (_frostCheckCallback != null) {
+      debugPrint('Frost-Check-Callback wird ausgelöst');
+      _frostCheckCallback!();
+    } else {
+      debugPrint('Frost-Check-Callback nicht gesetzt');
+    }
   }
   
   // Setze den App-Vordergrund-Status
@@ -46,7 +59,44 @@ class NotificationService {
     debugPrint('App-Zustand geändert: ${_isAppInForeground ? 'im Vordergrund' : 'im Hintergrund'}');
   }
   
-  // Initialisiere Benachrichtigungen
+  // Initialisiert den Benachrichtigungsdienst
+  Future<void> initialize() async {
+    debugPrint('Initialisiere NotificationService');
+    
+    try {
+      // Initialisierungseinstellungen für Android
+      const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
+      
+      // Initialisierungseinstellungen für iOS
+      const DarwinInitializationSettings initializationSettingsIOS = DarwinInitializationSettings(
+        requestAlertPermission: true,
+        requestBadgePermission: true,
+        requestSoundPermission: true,
+      );
+      
+      // Gesamte Initialisierungseinstellungen
+      const InitializationSettings initializationSettings = InitializationSettings(
+        android: initializationSettingsAndroid,
+        iOS: initializationSettingsIOS,
+      );
+      
+      // Initialisiere das Plugin
+      await _flutterLocalNotificationsPlugin.initialize(
+        initializationSettings,
+        onDidReceiveNotificationResponse: _onNotificationResponse,
+      );
+      
+      // Prüfe und fordere Berechtigungen an (für iOS und neuere Android-Versionen)
+      await checkAndRequestNotificationPermissions();
+      
+      debugPrint('NotificationService erfolgreich initialisiert');
+    } catch (e) {
+      debugPrint('Fehler bei der Initialisierung des NotificationService: $e');
+      throw NotificationException('Fehler bei der Initialisierung des Benachrichtigungsdienstes: $e');
+    }
+  }
+  
+  // Initialisiert den Benachrichtigungsdienst
   Future<void> initNotifications() async {
     debugPrint('Initialisiere Benachrichtigungen');
     
@@ -58,46 +108,21 @@ class NotificationService {
       const AndroidInitializationSettings initializationSettingsAndroid =
           AndroidInitializationSettings('@mipmap/ic_launcher');
           
-      // Initialisiere iOS-Einstellungen
-      final DarwinInitializationSettings initializationSettingsIOS =
-          DarwinInitializationSettings(
-        requestAlertPermission: true,  // Frage Berechtigungen automatisch an
+      // Initialisierungseinstellungen für iOS
+      const DarwinInitializationSettings initializationSettingsIOS = DarwinInitializationSettings(
+        requestAlertPermission: true,
         requestBadgePermission: true,
         requestSoundPermission: true,
-        notificationCategories: [
-          DarwinNotificationCategory(
-            frostWarningChannelId,
-            actions: <DarwinNotificationAction>[
-              DarwinNotificationAction.plain(
-                'OPEN_APP',
-                'App öffnen',
-                options: <DarwinNotificationActionOption>{
-                  DarwinNotificationActionOption.foreground,
-                },
-              ),
-            ],
-            options: <DarwinNotificationCategoryOption>{
-              DarwinNotificationCategoryOption.hiddenPreviewShowTitle,
-            },
-          ),
-          DarwinNotificationCategory(
-            dailyCheckChannelId,
-            actions: <DarwinNotificationAction>[],
-            options: <DarwinNotificationCategoryOption>{
-              DarwinNotificationCategoryOption.hiddenPreviewShowTitle,
-            },
-          ),
-        ],
       );
       
       // Kombiniere Plattform-Einstellungen
-      final InitializationSettings initializationSettings = InitializationSettings(
+      const InitializationSettings initializationSettings = InitializationSettings(
         android: initializationSettingsAndroid,
         iOS: initializationSettingsIOS,
       );
       
       // Initialisiere Plugin
-      await flutterLocalNotificationsPlugin.initialize(
+      await _flutterLocalNotificationsPlugin.initialize(
         initializationSettings,
         onDidReceiveNotificationResponse: (NotificationResponse response) {
           _onNotificationResponse(response);
@@ -135,52 +160,48 @@ class NotificationService {
     );
   }
   
-  // Registriere einen Callback für die Frost-Überprüfung
-  static Function? _frostCheckCallback;
-  
-  // Setze den Callback für die Frost-Überprüfung
-  static void setFrostCheckCallback(Function callback) {
-    _frostCheckCallback = callback;
-    debugPrint('Frost-Überprüfungs-Callback registriert');
-  }
-  
-  // Löse die Frost-Überprüfung aus
-  static void triggerFrostCheck() {
-    debugPrint('Löse Frost-Überprüfung aus');
-    if (_frostCheckCallback != null) {
-      _frostCheckCallback!();
-    } else {
-      debugPrint('Kein Frost-Überprüfungs-Callback registriert');
-    }
-  }
-  
   // Überprüfe und beantrage Berechtigungen für Benachrichtigungen
   Future<bool> checkAndRequestNotificationPermissions() async {
     try {
       // Überprüfe aktuelle Berechtigungen
       final AndroidFlutterLocalNotificationsPlugin? androidPlugin = 
-          flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+          _flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
           
       if (androidPlugin != null) {
         final bool? areEnabled = await androidPlugin.areNotificationsEnabled();
+        
+        if (areEnabled == false) {
+          // Berechtigungen anfordern
+          final bool? granted = await androidPlugin.requestNotificationsPermission();
+          return granted ?? false;
+        }
+        
         return areEnabled ?? false;
       }
       
-      // Für iOS/andere Plattformen
+      // Für iOS - vereinfachte Implementation
+      // Da wir DarwinFlutterLocalNotificationsPlugin nicht verwenden können
       return true;
     } catch (e) {
-      debugPrint('Fehler beim Überprüfen der Benachrichtigungsberechtigungen: $e');
+      debugPrint('Fehler beim Überprüfen/Anfordern von Berechtigungen: $e');
       return false;
     }
+  }
+  
+  // Alias für _requestPermissions, um Abwärtskompatibilität zu gewährleisten
+  Future<bool> _requestPermissions() async {
+    return await checkAndRequestNotificationPermissions();
   }
   
   // Zeige eine Frostwarnung an
   Future<void> showFrostWarning(String title, String body, {bool forceShow = false}) async {
     debugPrint('Zeige Frostwarnung an: $title - $body, Force: $forceShow');
     
-    // Wenn die App im Vordergrund ist und nicht erzwungen wird, keine Benachrichtigung anzeigen
+    // Nur wenn die App im Vordergrund ist und es keine Test-Benachrichtigung ist,
+    // überspringen wir die Benachrichtigung
     if (_isAppInForeground && !forceShow) {
-      debugPrint('App ist im Vordergrund, überspringe Benachrichtigung');
+      debugPrint('App ist im Vordergrund und kein Test, zeige nur eine Information an: $title');
+      // Hier könnte man dem Benutzer einen Toast oder eine In-App-Nachricht zeigen
       return;
     }
     
@@ -217,7 +238,7 @@ class NotificationService {
     );
     
     // Zeige die Benachrichtigung an
-    await flutterLocalNotificationsPlugin.show(
+    await _flutterLocalNotificationsPlugin.show(
       _generateNotificationId(),  // Eindeutige ID für jede Benachrichtigung
       title,
       body,
@@ -258,7 +279,7 @@ class NotificationService {
       debugPrint('Plane tägliche Überprüfung für $hour:$minute Uhr');
       
       // Überprüfe zuerst die Berechtigung
-      final bool hasPermission = await checkAndRequestNotificationPermissions();
+      final bool hasPermission = await _requestPermissions();
       
       if (!hasPermission) {
         debugPrint('Keine Berechtigung für Benachrichtigungen');
@@ -266,7 +287,7 @@ class NotificationService {
       }
       
       // Lösche vorherige geplante Benachrichtigungen
-      await flutterLocalNotificationsPlugin.cancelAll();
+      await _flutterLocalNotificationsPlugin.cancelAll();
       debugPrint('Vorherige Benachrichtigungen gelöscht');
       
       // Erstelle eine Zeit für die tägliche Überprüfung
@@ -289,6 +310,11 @@ class NotificationService {
       );
       
       // iOS-spezifische Einstellungen
+      const DarwinInitializationSettings initializationSettingsIOS = DarwinInitializationSettings(
+        requestAlertPermission: true,
+        requestBadgePermission: true,
+        requestSoundPermission: true,
+      );
       const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
         presentAlert: true,   // Zeigt eine Alert-Nachricht an
         presentBadge: true,   // Aktualisiert das App-Badge
@@ -306,7 +332,7 @@ class NotificationService {
       
       // Versuche zuerst, einen exakten Zeitplan zu verwenden
       try {
-        await flutterLocalNotificationsPlugin.zonedSchedule(
+        await _flutterLocalNotificationsPlugin.zonedSchedule(
           AppConstants.DAILY_CHECK_ID,
           'Frost-Überprüfung',
           'Überprüfe Wettervorhersage auf Frostgefahr',
@@ -323,7 +349,7 @@ class NotificationService {
         // Wenn exakter Zeitplan nicht erlaubt ist, verwende periodischen Zeitplan
         debugPrint('Exakte Alarme nicht erlaubt, verwende ungefähre Planung: $e');
         
-        await flutterLocalNotificationsPlugin.periodicallyShow(
+        await _flutterLocalNotificationsPlugin.periodicallyShow(
           AppConstants.DAILY_CHECK_ID,
           'Frost-Überprüfung',
           'Überprüfe Wettervorhersage auf Frostgefahr',
@@ -369,7 +395,7 @@ class NotificationService {
   
   // Lösche alle Benachrichtigungen
   Future<void> cancelAllNotifications() async {
-    await flutterLocalNotificationsPlugin.cancelAll();
+    await _flutterLocalNotificationsPlugin.cancelAll();
   }
   
   // Teste die Frostbenachrichtigungen

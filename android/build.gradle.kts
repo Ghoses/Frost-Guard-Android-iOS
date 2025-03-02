@@ -2,6 +2,12 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        maven {
+            setUrl("${project(":background_fetch").projectDir}/libs")
+        }
+        maven {
+            setUrl("https://github.com/transistorsoft/flutter_background_fetch/raw/master/dist")
+        }
     }
 }
 

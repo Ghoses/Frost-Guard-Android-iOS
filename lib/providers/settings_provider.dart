@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:frost_guard/core/services/storage_service.dart';
 import 'package:frost_guard/core/services/notification_service.dart';
 import 'package:frost_guard/models/settings.dart';
+import 'package:frost_guard/core/services/background_service.dart';
 
 class SettingsProvider with ChangeNotifier {
   final StorageService _storageService = StorageService();
@@ -61,6 +62,7 @@ class SettingsProvider with ChangeNotifier {
     }
     
     await _saveSettings();
+    await _updateBackgroundTask();
   }
 
   Future<void> setTemperatureUnit(String value) async {
@@ -94,6 +96,8 @@ class SettingsProvider with ChangeNotifier {
       } else {
         debugPrint('Benachrichtigungen sind deaktiviert, kein Zeitplan erstellt');
       }
+      
+      await _updateBackgroundTask();
     } catch (e) {
       debugPrint('Fehler beim Setzen der Überprüfungszeit: $e');
     }
@@ -105,6 +109,26 @@ class SettingsProvider with ChangeNotifier {
     } catch (e) {
       // Fehlerbehandlung bei fehlgeschlagener Speicherung
       debugPrint('Fehler beim Speichern der Einstellungen: $e');
+    }
+  }
+  
+  // Aktualisiert den Hintergrund-Task basierend auf den aktuellen Einstellungen
+  Future<void> _updateBackgroundTask() async {
+    try {
+      // Importiere den BackgroundService dynamisch, um zirkuläre Abhängigkeiten zu vermeiden
+      final BackgroundService backgroundService = BackgroundService();
+      
+      if (_settings.notificationsEnabled) {
+        // Plane den Frost-Check
+        await backgroundService.scheduleFrostCheck(_settings.checkHour, _settings.checkMinute);
+        debugPrint('Frost-Check für ${_settings.checkHour}:${_settings.checkMinute} geplant');
+      } else {
+        // Abbrechen aller Hintergrund-Tasks
+        await backgroundService.stopAllTasks();
+        debugPrint('Alle Hintergrund-Tasks abgebrochen');
+      }
+    } catch (e) {
+      debugPrint('Fehler beim Aktualisieren des Hintergrund-Tasks: $e');
     }
   }
 }
