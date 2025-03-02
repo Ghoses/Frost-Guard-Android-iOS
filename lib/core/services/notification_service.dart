@@ -11,7 +11,23 @@ import 'package:flutter/material.dart';
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
-  NotificationService._internal();
+  NotificationService._internal() {
+    _initAppLifecycleListener();
+  }
+
+  // App-Zustandsverfolgung
+  bool _isAppInForeground = true;
+  late final AppLifecycleListener _lifecycleListener;
+
+  // Initialisiere den App-Lifecycle-Listener
+  void _initAppLifecycleListener() {
+    _lifecycleListener = AppLifecycleListener(
+      onStateChange: (AppLifecycleState state) {
+        _isAppInForeground = state == AppLifecycleState.resumed;
+        debugPrint('App-Zustand geändert: ${state.name}, im Vordergrund: $_isAppInForeground');
+      },
+    );
+  }
 
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
@@ -115,62 +131,75 @@ class NotificationService {
   }
   
   // Sende eine Frostwarnung
-  Future<void> showFrostWarning(String title, String body) async {
+  Future<void> showFrostWarning(String title, String body, {bool forceShow = false}) async {
     try {
-      // Überprüfe zuerst die Berechtigung
-      final bool hasPermission = await checkAndRequestNotificationPermissions();
-      
-      if (!hasPermission) {
-        throw NotificationException('Benachrichtigungsberechtigungen nicht erteilt');
+      // Nur senden, wenn App im Hintergrund oder explizit erzwungen (Test-Button)
+      if (!_isAppInForeground || forceShow) {
+        debugPrint('Sende Benachrichtigung: $title (forceShow: $forceShow, imVordergrund: $_isAppInForeground)');
+        
+        // Überprüfe zuerst die Berechtigung
+        final bool hasPermission = await checkAndRequestNotificationPermissions();
+        
+        if (!hasPermission) {
+          throw NotificationException('Benachrichtigungsberechtigungen nicht erteilt');
+        }
+        
+        // Konfiguriere Android-Details
+        final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+          frostWarningChannelId,
+          'Frostwarnungen',
+          channelDescription: 'Benachrichtigungen über Frostgefahr',
+          importance: Importance.high,
+          priority: Priority.high,
+          enableVibration: true,
+          icon: '@mipmap/ic_launcher',
+        );
+        
+        // Konfiguriere iOS-Details mit besserer Sichtbarkeit
+        final DarwinNotificationDetails iOSDetails = DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+          badgeNumber: 1,
+          interruptionLevel: InterruptionLevel.timeSensitive, // Höher priorisiert
+          categoryIdentifier: frostWarningChannelId,
+          threadIdentifier: 'frost_warnings',
+        );
+        
+        // Kombiniere Plattform-Details
+        final NotificationDetails platformDetails = NotificationDetails(
+          android: androidDetails,
+          iOS: iOSDetails,
+        );
+        
+        // Zeige Benachrichtigung
+        await flutterLocalNotificationsPlugin.show(
+          _generateNotificationId(), // Dynamische Notification ID
+          title,
+          body,
+          platformDetails,
+          payload: 'frost_warning',
+        );
+      } else {
+        debugPrint('Benachrichtigung unterdrückt (App im Vordergrund): $title');
       }
-      
-      // Konfiguriere Android-Details
-      const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-        frostWarningChannelId,
-        'Frost-Warnungen',
-        channelDescription: 'Benachrichtigungen über Frostgefahr',
-        importance: Importance.high,
-        priority: Priority.high,
-        enableVibration: true,
-        icon: '@mipmap/ic_launcher',
-      );
-      
-      // Konfiguriere iOS-Details mit besserer Sichtbarkeit
-      final DarwinNotificationDetails iOSDetails = DarwinNotificationDetails(
-        presentAlert: true,
-        presentBadge: true,
-        presentSound: true,
-        badgeNumber: 1,
-        interruptionLevel: InterruptionLevel.timeSensitive, // Höher priorisiert
-        categoryIdentifier: frostWarningChannelId,
-        threadIdentifier: 'frost_warnings',
-      );
-      
-      // Kombiniere Plattform-Details
-      final NotificationDetails platformDetails = NotificationDetails(
-        android: androidDetails,
-        iOS: iOSDetails,
-      );
-      
-      // Zeige Benachrichtigung
-      await flutterLocalNotificationsPlugin.show(
-        1, // Notification ID
-        title,
-        body,
-        platformDetails,
-        payload: 'frost_warning',
-      );
     } catch (e) {
       debugPrint('Fehler beim Senden der Frostwarnung: $e');
       throw NotificationException('Fehler beim Senden der Frostwarnung: $e');
     }
   }
   
+  // Generiere eine eindeutige ID für Benachrichtigungen
+  int _generateNotificationId() {
+    return DateTime.now().millisecondsSinceEpoch.remainder(100000);
+  }
+  
   // Methode für den Test-Button
   Future<void> showTestNotification() async {
     await showFrostWarning(
       'Test: Frostwarnung', 
-      'Dies ist eine Test-Benachrichtigung. Die Benachrichtigungsfunktion funktioniert!'
+      'Dies ist eine Test-Benachrichtigung. Die Benachrichtigungsfunktion funktioniert!',
+      forceShow: true
     );
   }
   
