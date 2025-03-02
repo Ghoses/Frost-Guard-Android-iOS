@@ -51,5 +51,7 @@
 	<string>Diese App benötigt Zugriff auf Ihren Standort, um lokale Wettervorhersagen und Frostwarnungen bereitzustellen.</string>
 	<key>NSUserNotificationsUsageDescription</key>
 	<string>Diese App benötigt die Erlaubnis, Benachrichtigungen zu senden, um Sie über Frostgefahr zu informieren.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Diese App benötigt Zugriff auf den Kalender, um tägliche Frostwarnungen zu planen.</string>
 </dict>
 </plist>

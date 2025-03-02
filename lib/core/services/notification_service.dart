@@ -1,5 +1,6 @@
 // Benachrichtigungsdienst für Frost Guard
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_local_notifications_platform_interface/flutter_local_notifications_platform_interface.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:frost_guard/core/constants/app_constants.dart';
@@ -30,15 +31,39 @@ class NotificationService {
           AndroidInitializationSettings('@mipmap/ic_launcher');
           
       // Initialisiere iOS-Einstellungen
-      const DarwinInitializationSettings initializationSettingsIOS =
+      final DarwinInitializationSettings initializationSettingsIOS =
           DarwinInitializationSettings(
-        requestAlertPermission: false,  // Wir fragen Berechtigungen später explizit an
-        requestBadgePermission: false,
-        requestSoundPermission: false,
+        requestAlertPermission: true,  // Frage Berechtigungen automatisch an
+        requestBadgePermission: true,
+        requestSoundPermission: true,
+        notificationCategories: [
+          DarwinNotificationCategory(
+            frostWarningChannelId,
+            actions: <DarwinNotificationAction>[
+              DarwinNotificationAction.plain(
+                'OPEN_APP',
+                'App öffnen',
+                options: <DarwinNotificationActionOption>{
+                  DarwinNotificationActionOption.foreground,
+                },
+              ),
+            ],
+            options: <DarwinNotificationCategoryOption>{
+              DarwinNotificationCategoryOption.hiddenPreviewShowTitle,
+            },
+          ),
+          DarwinNotificationCategory(
+            dailyCheckChannelId,
+            actions: <DarwinNotificationAction>[],
+            options: <DarwinNotificationCategoryOption>{
+              DarwinNotificationCategoryOption.hiddenPreviewShowTitle,
+            },
+          ),
+        ],
       );
       
       // Kombiniere Plattform-Einstellungen
-      const InitializationSettings initializationSettings = InitializationSettings(
+      final InitializationSettings initializationSettings = InitializationSettings(
         android: initializationSettingsAndroid,
         iOS: initializationSettingsIOS,
       );
@@ -77,17 +102,10 @@ class NotificationService {
           return areEnabled ?? false;
         }
       } else if (Platform.isIOS) {
-        final IOSFlutterLocalNotificationsPlugin? iosPlugin = 
-            flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>();
-        
-        if (iosPlugin != null) {
-          final bool? result = await iosPlugin.requestPermissions(
-            alert: true,
-            badge: true,
-            sound: true,
-          );
-          return result ?? false;
-        }
+        // Auf iOS/Darwin können wir einfach true zurückgeben, da die Berechtigungen
+        // beim ersten Aufruf automatisch angefordert werden und im AppDelegate.swift behandelt werden
+        debugPrint('iOS-Benachrichtigungen werden beim ersten Aufruf automatisch angefordert');
+        return true;
       }
       return false;
     } catch (e) {
@@ -117,15 +135,19 @@ class NotificationService {
         icon: '@mipmap/ic_launcher',
       );
       
-      // Konfiguriere iOS-Details
-      const DarwinNotificationDetails iOSDetails = DarwinNotificationDetails(
+      // Konfiguriere iOS-Details mit besserer Sichtbarkeit
+      final DarwinNotificationDetails iOSDetails = DarwinNotificationDetails(
         presentAlert: true,
         presentBadge: true,
         presentSound: true,
+        badgeNumber: 1,
+        interruptionLevel: InterruptionLevel.timeSensitive, // Höher priorisiert
+        categoryIdentifier: frostWarningChannelId,
+        threadIdentifier: 'frost_warnings',
       );
       
       // Kombiniere Plattform-Details
-      const NotificationDetails platformDetails = NotificationDetails(
+      final NotificationDetails platformDetails = NotificationDetails(
         android: androidDetails,
         iOS: iOSDetails,
       );
@@ -175,9 +197,18 @@ class NotificationService {
       // Erstelle eine Zeit für die tägliche Überprüfung
       final tz.TZDateTime scheduledTime = _nextInstanceOfTime(hour, minute);
       
+      // iOS-spezifische Einstellungen für Hintergrundbenachrichtigungen
+      final DarwinNotificationDetails darwinNotificationDetails = DarwinNotificationDetails(
+        presentAlert: false, // Hintergrundüberprüfungen sollen nicht sichtbar sein
+        presentBadge: false,
+        presentSound: false,
+        categoryIdentifier: dailyCheckChannelId,
+        threadIdentifier: 'daily_checks',
+      );
+      
       // Konfiguriere Benachrichtigungsdetails (niedrigere Priorität für Hintergrundaufgaben)
-      const notificationDetails = NotificationDetails(
-          android: AndroidNotificationDetails(
+      final NotificationDetails notificationDetails = NotificationDetails(
+          android: const AndroidNotificationDetails(
             dailyCheckChannelId,
             'Tägliche Überprüfungen',
             channelDescription: 'Hintergrundüberprüfungen der Wettervorhersage',
@@ -186,11 +217,7 @@ class NotificationService {
             playSound: false,
             enableVibration: false,
           ),
-          iOS: DarwinNotificationDetails(
-            presentAlert: false,
-            presentBadge: false,
-            presentSound: false,
-          ),
+          iOS: darwinNotificationDetails,
         );
       
       // Plane tägliche Benachrichtigung
