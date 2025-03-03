@@ -252,7 +252,8 @@ class SettingsScreen extends StatelessWidget {
           try {
             if (value) {
               // Wenn Benachrichtigungen aktiviert werden, überprüfe die Berechtigung
-              final hasPermission = await NotificationService().checkAndRequestNotificationPermissions();
+              final notificationService = NotificationService();
+              final hasPermission = await notificationService.requestNotificationPermissions();
               if (!hasPermission) {
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -268,42 +269,8 @@ class SettingsScreen extends StatelessWidget {
             
             // Setze den Wert
             settingsProvider.setNotificationsEnabled(value);
-            
-            // Wenn aktiviert, aktualisiere den Zeitplan
-            if (value) {
-              await NotificationService().scheduleDailyCheck(
-                settingsProvider.checkHour,
-                settingsProvider.checkMinute,
-              );
-              
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Benachrichtigungen aktiviert'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            } else {
-              // Wenn deaktiviert, lösche alle Benachrichtigungen
-              await NotificationService().cancelAllNotifications();
-              
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Benachrichtigungen deaktiviert'),
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            }
           } catch (e) {
-            if (!context.mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Fehler: ${e.toString()}'),
-                duration: const Duration(seconds: 4),
-                backgroundColor: Colors.red,
-              ),
-            );
+            debugPrint('Fehler bei Benachrichtigungsberechtigungen: $e');
           }
         },
       ),

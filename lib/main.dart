@@ -152,6 +152,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       // Initialisiere den Hintergrund-Service
       await _backgroundService.init();
       
+      // Plane täglichen Frost-Check um 8 Uhr morgens
+      await _notificationService.scheduleDailyFrostCheck(
+        const TimeOfDay(hour: 8, minute: 0)
+      );
+      
       setState(() {
         _isInitialized = true;
       });

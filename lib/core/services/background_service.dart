@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:background_fetch/background_fetch.dart';
@@ -7,26 +6,94 @@ import 'package:frost_guard/core/services/weather_service.dart';
 import 'package:frost_guard/models/location.dart';
 import 'package:frost_guard/models/weather_data.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:frost_guard/core/constants/app_constants.dart';
+import 'package:frost_guard/core/services/location_service.dart';
 
 class BackgroundService {
   static final BackgroundService _instance = BackgroundService._internal();
   final WeatherService _weatherService = WeatherService();
   final NotificationService _notificationService = NotificationService();
+  final LocationService _locationService = LocationService();
   
   bool _isRunning = false;
   
-  // Singleton-Konstruktor
   factory BackgroundService() {
     return _instance;
   }
   
   BackgroundService._internal();
-  
+
+  // Speichere einen Standort
+  Future<void> saveLocation(Location location) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Hole bestehende Standorte
+      final locationData = prefs.getStringList(AppConstants.KEY_LOCATIONS) ?? [];
+      
+      // Konvertiere Standort zu JSON
+      final locationJson = jsonEncode(location.toJson());
+      
+      // Prüfe, ob Standort bereits existiert
+      final existingIndex = locationData.indexWhere((json) {
+        final Map<String, dynamic> existingLocation = jsonDecode(json);
+        return existingLocation['latitude'] == location.latitude && 
+               existingLocation['longitude'] == location.longitude;
+      });
+      
+      if (existingIndex != -1) {
+        // Aktualisiere existierenden Standort
+        locationData[existingIndex] = locationJson;
+      } else {
+        // Füge neuen Standort hinzu
+        locationData.add(locationJson);
+      }
+      
+      // Speichere aktualisierte Standortliste
+      await prefs.setStringList(AppConstants.KEY_LOCATIONS, locationData);
+      
+      debugPrint('Standort gespeichert: ${location.name}');
+    } catch (e) {
+      debugPrint('Fehler beim Speichern des Standorts: $e');
+    }
+  }
+
+  // Lade den aktuellen Standort
+  Future<Location?> loadCurrentLocation() async {
+    try {
+      // Versuche, den aktuellen Standort zu laden
+      final currentLocation = await _locationService.getCurrentLocation();
+      
+      // Speichere den aktuellen Standort
+      await saveLocation(currentLocation);
+      
+      return currentLocation;
+    } catch (e) {
+      debugPrint('Fehler beim Laden des aktuellen Standorts: $e');
+      return null;
+    }
+  }
+
+  // Initialisiere Standorte für Hintergrundaufgaben
+  Future<void> initializeLocationsForBackgroundTasks() async {
+    try {
+      // Versuche, den aktuellen Standort zu laden und zu speichern
+      await loadCurrentLocation();
+      
+      debugPrint('Standorte für Hintergrundaufgaben initialisiert');
+    } catch (e) {
+      debugPrint('Fehler bei der Initialisierung der Standorte: $e');
+    }
+  }
+
   // Initialisiert den Hintergrund-Service
   Future<void> init() async {
     debugPrint('Initialisiere BackgroundService');
     
     try {
+      // Initialisiere Standorte vor der Konfiguration von BackgroundFetch
+      await initializeLocationsForBackgroundTasks();
+      
       // Konfiguriere BackgroundFetch
       await BackgroundFetch.configure(
         BackgroundFetchConfig(
@@ -181,7 +248,7 @@ class BackgroundService {
       
       // Lade gespeicherte Standorte
       final prefs = await SharedPreferences.getInstance();
-      final locationData = prefs.getStringList('locations') ?? [];
+      final locationData = prefs.getStringList(AppConstants.KEY_LOCATIONS) ?? [];
       
       if (locationData.isEmpty) {
         debugPrint('Keine Standorte gefunden, überspringe Frost-Check');
@@ -189,7 +256,7 @@ class BackgroundService {
       }
       
       // Lade Schwellenwert aus Einstellungen
-      final threshold = prefs.getDouble('temperature_threshold') ?? 3.0;
+      final threshold = prefs.getDouble(AppConstants.KEY_TEMPERATURE_THRESHOLD) ?? 3.0;
       debugPrint('Frostschwellenwert: $threshold°');
       
       // Überprüfe jeden Standort auf Frost
