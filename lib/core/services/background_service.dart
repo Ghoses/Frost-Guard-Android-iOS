@@ -152,6 +152,9 @@ class BackgroundService {
     debugPrint('Plane Frost-Check für $hour:$minute Uhr');
     
     try {
+      // Stoppe zuerst alle vorherigen Tasks
+      await stopAllTasks();
+      
       // Berechne die nächste Ausführungszeit
       final now = DateTime.now();
       var scheduledTime = DateTime(
@@ -171,7 +174,7 @@ class BackgroundService {
       final initialDelay = scheduledTime.difference(now);
       
       debugPrint('Nächste geplante Ausführung: ${scheduledTime.toString()}');
-      debugPrint('Verzögerung: ${initialDelay.inHours} Stunden und ${initialDelay.inMinutes % 60} Minuten');
+      debugPrint('Verzögerung zur ersten Ausführung: ${initialDelay.inHours} Stunden und ${initialDelay.inMinutes % 60} Minuten');
       
       // Speichere die geplante Zeit in SharedPreferences
       final prefs = await SharedPreferences.getInstance();
@@ -197,9 +200,10 @@ class BackgroundService {
       ));
       
       // Konfiguriere einen täglichen Task (24 Stunden)
+      final oneDayInMillis = const Duration(days: 1).inMilliseconds;
       await BackgroundFetch.scheduleTask(TaskConfig(
-        taskId: 'frost_check_daily',
-        delay: initialDelay.inMilliseconds,
+        taskId: 'frost_check_main',
+        delay: initialDelay.inMilliseconds + oneDayInMillis,
         periodic: true,
         forceAlarmManager: true,
         stopOnTerminate: false,
@@ -259,6 +263,9 @@ class BackgroundService {
       final threshold = prefs.getDouble(AppConstants.KEY_TEMPERATURE_THRESHOLD) ?? 3.0;
       debugPrint('Frostschwellenwert: $threshold°');
       
+      // Liste für Frost-Warnungen
+      final frostWarnings = <Map<String, String>>[];
+      
       // Überprüfe jeden Standort auf Frost
       for (final locationJson in locationData) {
         try {
@@ -288,8 +295,11 @@ class BackgroundService {
             final title = 'Frostwarnung für ${location.name}';
             final body = 'Die Temperatur sinkt auf $lowestTemp°. Bitte schützen Sie empfindliche Pflanzen!';
             
-            // Sende die Benachrichtigung
-            await _notificationService.showFrostWarning(title, body);
+            // Füge Warnung zur Liste hinzu
+            frostWarnings.add({
+              'title': title,
+              'body': body,
+            });
             
             // Speichere Frost-Status
             await prefs.setBool('frost_warning_${location.id}', true);
@@ -301,6 +311,14 @@ class BackgroundService {
           debugPrint('Fehler bei der Überprüfung von Standort: $e');
           continue;
         }
+      }
+      
+      // Sende Benachrichtigungen mit Verzögerung
+      for (final warning in frostWarnings) {
+        await _notificationService.showFrostWarning(warning['title']!, warning['body']!);
+        
+        // Warte 3 Sekunden zwischen den Benachrichtigungen
+        await Future.delayed(const Duration(seconds: 3));
       }
       
       debugPrint('Frost-Check abgeschlossen');

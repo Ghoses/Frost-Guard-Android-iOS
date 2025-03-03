@@ -68,47 +68,41 @@ class NotificationService {
     debugPrint('App-Zustand geändert: ${_isAppInForeground ? 'im Vordergrund' : 'im Hintergrund'}');
   }
   
-  // Initialisierung der Benachrichtigungsdienste
-  Future<void> initialize() async {
+  // Initialisiere Benachrichtigungsdienst
+  Future<void> init() async {
+    if (_isInitialized) return;
+
     try {
-      // Verhindere mehrfache Initialisierung
-      if (_isInitialized) return;
-
-      // Android-Initialisierungseinstellungen
-      const AndroidInitializationSettings androidInitializationSettings = 
-          AndroidInitializationSettings('@mipmap/ic_launcher');
-
-      // iOS-Initialisierungseinstellungen
-      const DarwinInitializationSettings darwinInitializationSettings = 
-          DarwinInitializationSettings(
-        requestAlertPermission: true,
-        requestBadgePermission: true,
-        requestSoundPermission: true,
+      // Konfiguriere Android-Einstellungen
+      const androidInitializationSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      
+      // Konfiguriere iOS-Einstellungen
+      const iosInitializationSettings = DarwinInitializationSettings(
+        requestSoundPermission: false,
+        requestBadgePermission: false,
+        requestAlertPermission: false,
       );
 
-      // Gesamte Initialisierungseinstellungen
-      final InitializationSettings initializationSettings = InitializationSettings(
+      // Gesamtkonfiguration
+      const initializationSettings = InitializationSettings(
         android: androidInitializationSettings,
-        iOS: darwinInitializationSettings,
+        iOS: iosInitializationSettings,
       );
 
-      // Plugin initialisieren
+      // Initialisiere Plugin
       await flutterLocalNotificationsPlugin.initialize(
         initializationSettings,
-        onDidReceiveNotificationResponse: _handleNotificationTap,
+        onDidReceiveNotificationResponse: _onNotificationTap,
       );
 
-      // Berechtigungen anfordern
-      await requestNotificationPermissions();
-
-      // Benachrichtigungskanäle für Android erstellen
+      // Konfiguriere Benachrichtigungskanäle
       await _createNotificationChannels();
 
-      // Initialisierungsstatus setzen
+      // Setze Initialisierungsstatus
       _isInitialized = true;
-      debugPrint('NotificationService erfolgreich initialisiert');
     } catch (e) {
-      debugPrint('Fehler bei der Initialisierung: $e');
+      debugPrint('Fehler bei der Initialisierung des Benachrichtigungsdienstes: $e');
+      throw NotificationException('Initialisierung fehlgeschlagen: $e');
     }
   }
 
@@ -140,15 +134,14 @@ class NotificationService {
     // Hier können spezifische Aktionen beim Tippen auf eine Benachrichtigung definiert werden
   }
 
-  // Erstelle Benachrichtigungskanäle für Android
+  // Erstelle Benachrichtigungskanäle
   Future<void> _createNotificationChannels() async {
-    final AndroidFlutterLocalNotificationsPlugin? androidImplementation = 
-        flutterLocalNotificationsPlugin
-            .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-
-    if (androidImplementation != null) {
-      // Frost-Warnungs-Kanal
-      await androidImplementation.createNotificationChannel(
+    final androidPlugin = flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    
+    if (androidPlugin != null) {
+      // Android-Benachrichtigungskanäle
+      await androidPlugin.createNotificationChannel(
         const AndroidNotificationChannel(
           frostWarningChannelId,
           'Frost-Warnungen',
@@ -157,16 +150,21 @@ class NotificationService {
         ),
       );
 
-      // Täglicher Check-Kanal
-      await androidImplementation.createNotificationChannel(
+      await androidPlugin.createNotificationChannel(
         const AndroidNotificationChannel(
           dailyCheckChannelId,
-          'Tägliche Überprüfungen',
-          description: 'Tägliche Hintergrundüberprüfungen',
-          importance: Importance.high,
+          'Tägliche Frost-Checks',
+          description: 'Benachrichtigungen über tägliche Frost-Überprüfungen',
+          importance: Importance.low,
         ),
       );
     }
+  }
+
+  // Handler für Benachrichtigungstap
+  void _onNotificationTap(NotificationResponse details) {
+    debugPrint('Benachrichtigung getippt: ${details.payload}');
+    // Hier kannst du zusätzliche Aktionen definieren
   }
 
   // Plane tägliche Frost-Checks

@@ -6,7 +6,6 @@ import 'package:frost_guard/models/weather_data.dart';
 import 'package:frost_guard/providers/location_provider.dart';
 import 'package:frost_guard/providers/settings_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:frost_guard/main.dart'; // Importiere navigatorKey aus main.dart
 
 class WeatherProvider with ChangeNotifier {
   final WeatherService _weatherService = WeatherService();
@@ -28,32 +27,17 @@ class WeatherProvider with ChangeNotifier {
   WeatherProvider() {
     // Registriere den Callback für die Frost-Überprüfung
     NotificationService.setFrostCheckCallback(() {
-      debugPrint('Frost-Überprüfungs-Callback ausgelöst');
       checkForFrost();
-    });
-    
-    // Provider werden erst später initialisiert, daher warten wir auf den ersten Frame
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeProviders();
     });
   }
   
-  // Initialisiere die Provider, wenn der Kontext verfügbar ist
-  void _initializeProviders() {
+  // Initialisiere die Provider mit übergebenem Kontext
+  void initializeProviders(BuildContext context) {
     try {
-      if (navigatorKey.currentContext != null) {
-        _settingsProvider = Provider.of<SettingsProvider>(
-          navigatorKey.currentContext!,
-          listen: false,
-        );
-        _locationProvider = Provider.of<LocationProvider>(
-          navigatorKey.currentContext!,
-          listen: false,
-        );
-        debugPrint('Provider erfolgreich initialisiert');
-      }
+      _settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
+      _locationProvider = Provider.of<LocationProvider>(context, listen: false);
     } catch (e) {
-      debugPrint('Fehler bei der Provider-Initialisierung: $e');
+      print('Fehler bei der Provider-Initialisierung: $e');
     }
   }
   
@@ -148,166 +132,50 @@ class WeatherProvider with ChangeNotifier {
   
   // Tägliche Frost-Überprüfung durchführen
   Future<void> checkForFrost() async {
-    debugPrint('Starte Überprüfung auf Frost für alle Standorte');
-    
     if (_isLoading) {
-      debugPrint('Wetteraktualisierung läuft bereits, überspringe Überprüfung');
       return;
     }
     
     // Prüfe, ob der SettingsProvider initialisiert wurde
-    if (_settingsProvider == null) {
-      debugPrint('SettingsProvider ist nicht initialisiert, versuche erneut zu initialisieren');
-      // Versuche, den SettingsProvider zu initialisieren, falls er noch nicht verfügbar ist
-      try {
-        if (navigatorKey.currentContext != null) {
-          _settingsProvider = Provider.of<SettingsProvider>(
-            navigatorKey.currentContext!,
-            listen: false,
-          );
-        } else {
-          debugPrint('Kein Kontext verfügbar, überspringe Überprüfung');
-          return;
-        }
-      } catch (e) {
-        debugPrint('Fehler beim Initialisieren des SettingsProvider: $e');
-        return;
-      }
+    if (_settingsProvider == null || _locationProvider == null) {
+      return;
     }
     
     // Hole alle gespeicherten Standorte
     final locations = _locationProvider?.locations;
     
     if (locations == null || locations.isEmpty) {
-      debugPrint('Keine Standorte konfiguriert, überspringe Überprüfung');
       return;
     }
     
     _setLoading(true);
     
     try {
-      debugPrint('Überprüfe ${locations.length} Standorte auf Frost');
-      
       // Hole den konfigurierten Schwellenwert
       final threshold = _settingsProvider?.temperatureThreshold;
-      debugPrint('Frostschwellenwert: $threshold°');
       
       // Überprüfe jeden Standort auf Frost
       for (final location in locations) {
-        debugPrint('Überprüfe Standort: ${location.name}');
-        
         // Aktualisiere Wetterdaten für diesen Standort
         await updateForecast(location, threshold ?? 0.0, true);
-        
-        if (!_weatherData.containsKey(location.id)) {
-          debugPrint('Keine Wetterdaten für ${location.name} verfügbar, überspringe');
-          continue;
-        }
-        
-        // Ermittle die niedrigste Temperatur in den Vorhersagedaten
-        final lowestTemp = _getLowestTemperatureFromData(_weatherData[location.id]!, location.id);
-        debugPrint('Niedrigste Temperatur für ${location.name}: $lowestTemp°');
-        
-        // Ist die Temperatur unter dem Schwellenwert?
-        if (lowestTemp <= (threshold ?? 0.0)) {
-          debugPrint('Frost erkannt für ${location.name}! Temperatur: $lowestTemp° (Schwelle: ${threshold ?? 0.0}°)');
-          
-          // Formatiere die Benachrichtigungstexte
-          final title = 'Frostwarnung für ${location.name}';
-          final body = 'Die Temperatur sinkt auf $lowestTemp°. Bitte schützen Sie empfindliche Pflanzen!';
-          
-          // Sende die Benachrichtigung
-          await _notificationService.showFrostWarning(title, body);
-          
-          // Setze den Frost-Status für diesen Standort
-          _hasFrostWarning[location.id] = true;
-        } else {
-          debugPrint('Kein Frost für ${location.name}, Temperatur: $lowestTemp° (Schwelle: ${threshold ?? 0.0}°)');
-          _hasFrostWarning[location.id] = false;
-        }
       }
-      
-      debugPrint('Frostüberprüfung abgeschlossen');
-    } catch (e) {
-      debugPrint('Fehler bei der Frostüberprüfung: $e');
     } finally {
       _setLoading(false);
     }
   }
   
-  // Überprüfe einen bestimmten Standort auf Frost
-  Future<void> checkLocationForFrost(Location location, double threshold) async {
-    try {
-      debugPrint('Überprüfe Standort ${location.name} auf Frost');
-      
-      // Prüfe auf Frostgefahr
-      final willFreeze = await _weatherService.willFreezeTonightAt(
-        location.latitude, 
-        location.longitude, 
-        threshold
-      );
-      
-      // Ermittle die niedrigste Temperatur
-      final lowestTemp = await _weatherService.getLowestTonightTemperature(
-        location.latitude, 
-        location.longitude
-      );
-      
-      // Aktualisiere die Daten
-      _hasFrostWarning[location.id] = willFreeze;
-      _lowestTemperatures[location.id] = lowestTemp;
-      
-      // Zeige Benachrichtigung, wenn Frost zu erwarten ist
-      if (willFreeze) {
-        debugPrint('Frostwarnung für ${location.name}: $lowestTemp°C');
-        await _notificationService.showFrostWarningNotification(
-          location.name, 
-          lowestTemp
-        );
-      } else {
-        debugPrint('Kein Frost für ${location.name} erwartet: $lowestTemp°C');
-      }
-    } catch (e) {
-      debugPrint('Fehler bei der Frost-Überprüfung für Standort ${location.name}: $e');
-    }
-  }
-  
-  // Hilfsmethode, um die niedrigste Temperatur aus den Wetterdaten zu extrahieren
-  double _getLowestTemperatureFromData(WeatherData weatherData, String locationId) {
-    try {
-      if (weatherData.hourly.isNotEmpty) {
-        // Finde die niedrigste Temperatur in den nächsten 24 Stunden
-        final temperatures = weatherData.hourly.map((h) => h.temp).toList();
-        if (temperatures.isNotEmpty) {
-          return temperatures.reduce((value, element) => value < element ? value : element);
-        }
-      }
-      
-      // Fallback auf die gespeicherte niedrigste Temperatur
-      if (_lowestTemperatures.containsKey(locationId)) {
-        return _lowestTemperatures[locationId]!;
-      }
-      
-      // Wenn keine Daten verfügbar sind, gib einen Standardwert zurück
-      return 999.0; // Sehr hoher Wert, damit keine Frostwarnung ausgelöst wird
-    } catch (e) {
-      debugPrint('Fehler beim Extrahieren der niedrigsten Temperatur: $e');
-      return 999.0;
-    }
-  }
-  
-  void _setLoading(bool loading) {
-    _isLoading = loading;
+  // Hilfsmethoden
+  void _setLoading(bool value) {
+    _isLoading = value;
     notifyListeners();
   }
   
-  void _setError(String errorMessage) {
-    _errorMessage = errorMessage;
+  void _setError(String message) {
+    _errorMessage = message;
     notifyListeners();
   }
   
   void _clearError() {
     _errorMessage = null;
-    notifyListeners();
   }
 }
